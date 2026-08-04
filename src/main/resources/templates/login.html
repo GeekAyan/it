@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" th:href="@{/css/main.css}">
+</head>
+
+<body>
+    <div class="page">
+        <div class="left-panel">
+            <div class="left-content">
+                <h1>AIIMS Kalyani Event Portal</h1>
+                <p>Enter your email to receive OTP.</p>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="auth-card">
+                <div class="logo">
+                    <img th:src="@{/images/aiims-logo.png}" alt="AIIMS Logo">
+                </div>
+
+                <div class="title">
+                    <h2>OTP Login</h2>
+                    <p>Use your email address to get a one-time password</p>
+                </div>
+
+                <p class="error-msg" th:if="${error}" th:text="${error}"></p>
+                <p class="success-msg" th:if="${param.logout}">You have been logged out successfully.</p>
+
+                <form th:action="@{/request-otp}" method="post">
+                    <div class="field">
+                        <label>Email</label>
+                        <input type="email" name="email" required>
+                    </div>
+
+                    <button type="submit" class="btn">Send OTP</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

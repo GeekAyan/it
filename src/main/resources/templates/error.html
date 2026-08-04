@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Error</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f7fb;
+            margin: 0;
+            padding: 0;
+        }
+
+        .wrapper {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .card {
+            width: 100%;
+            max-width: 600px;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+            padding: 32px;
+            text-align: center;
+        }
+
+        h1 {
+            color: #c0392b;
+            margin-bottom: 12px;
+        }
+
+        p {
+            color: #444;
+            line-height: 1.6;
+            margin-bottom: 12px;
+        }
+
+        a {
+            display: inline-block;
+            margin-top: 16px;
+            text-decoration: none;
+            background: teal;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+        }
+
+        .meta {
+            font-size: 14px;
+            color: #777;
+            margin-top: 16px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrapper">
+        <div class="card">
+            <h1>Something went wrong</h1>
+            <p>The page could not be loaded right now.</p>
+            <p>Please go back to the home page and try again.</p>
+            <a th:href="@{/}">Go to Home</a>
+
+            <div class="meta">
+                <p th:if="${status}" th:text="'Status Code: ' + ${status}"></p>
+                <p th:if="${error}" th:text="'Error: ' + ${error}"></p>
+                <p th:if="${path}" th:text="'Path: ' + ${path}"></p>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

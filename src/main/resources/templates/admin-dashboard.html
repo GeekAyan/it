@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" th:href="@{/css/main.css}">
+</head>
+
+<body class="app-body">
+
+    <div class="topbar">
+        <div class="topbar-left">
+            <img th:src="@{/images/aiims-logo.png}" alt="AIIMS Logo" class="topbar-logo">
+            <div>
+                <h2 class="topbar-title">Admin Dashboard</h2>
+                <p class="topbar-subtitle">Manage event records and portal operations</p>
+            </div>
+        </div>
+
+        <div class="topbar-right">
+            <div class="user-badge" th:text="${adminUser}"></div>
+            <a class="btn secondary-btn" th:href="@{/events}">Manage Events</a>
+            <form th:action="@{/logout}" method="post" style="margin:0;">
+                <button type="submit" class="logout-btn">Logout</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="form-page">
+        <div class="form-card">
+            <div class="title left-align">
+                <h2>Welcome, Admin</h2>
+                <p sec:authorize="hasRole('ADMIN')">You can access administrator-only features from here.</p>
+            </div>
+
+            <div class="form-actions">
+                <a class="btn" th:href="@{/events}">Open Event Management</a>
+            </div>
+        </div>
+    </div>
+
+</body>
+
+</html>

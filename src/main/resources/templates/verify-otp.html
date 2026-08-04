@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Verify OTP</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" th:href="@{/css/main.css}">
+</head>
+
+<body>
+    <div class="page">
+        <div class="left-panel">
+            <div class="left-content">
+                <h1>Verify OTP</h1>
+                <p>Enter the code sent to your email.</p>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="auth-card">
+                <div class="title">
+                    <h2>OTP Verification</h2>
+                    <p th:text="'Email: ' + ${email}"></p>
+                </div>
+
+                <p class="error-msg" th:if="${param.error}">Invalid OTP.</p>
+
+                <form th:action="@{/verify-otp}" method="post">
+                    <input type="hidden" name="email" th:value="${email}">
+
+                    <div class="field">
+                        <label>OTP</label>
+                        <input type="text" name="otp" required>
+                    </div>
+
+                    <button type="submit" class="btn">Verify OTP</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
