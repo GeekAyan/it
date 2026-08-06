@@ -80,12 +80,12 @@
 
                     <div class="field">
                         <label>Contact Name</label>
-                        <input type="text" th:field="*{contactName}">
+                        <input type="text" th:field="*{contactName}" required>
                     </div>
 
                     <div class="field">
                         <label>Contact Phone</label>
-                        <input type="text" th:field="*{contactPhone}">
+                        <input type="text" th:field="*{contactPhone}" pattern="^\+?\d{10,15}$" title="Enter a valid phone number" required>
                     </div>
 
                     <div class="field full-width">

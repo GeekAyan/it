@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<body>
+    <header th:fragment="adminHeader(activePage)">
+        <div class="admin-topbar">
+            <div class="admin-topbar-inner">
+                <div class="brand-block">
+                    <img th:src="@{/images/aiims-logo.png}" alt="Logo" class="brand-logo">
+                    <div class="brand-title">
+                        <h1>AIIMS Kalyani Admin</h1>
+                        <p>Event and user management portal</p>
+                    </div>
+                </div>
+
+                <nav class="admin-nav">
+                    <a th:href="@{/admin/dashboard}" class="nav-link"
+                        th:classappend="${activePage == 'dashboard'} ? ' active' : ''">Dashboard</a>
+                    <a th:href="@{/admin/events}" class="nav-link"
+                        th:classappend="${activePage == 'events'} ? ' active' : ''">Manage Events</a>
+                    <a th:href="@{/admin/users}" class="nav-link"
+                        th:classappend="${activePage == 'users'} ? ' active' : ''">Manage Admins</a>
+                    <a th:href="@{/admin/profile}" class="nav-link"
+                        th:classappend="${activePage == 'profile'} ? ' active' : ''">Admin Profile</a>
+                </nav>
+
+                <div class="nav-spacer"></div>
+
+                <div class="user-pill" th:text="${adminUser}">admin@example.com</div>
+
+                <form th:action="@{/logout}" method="post" style="margin:0;">
+                    <button type="submit" class="logout-btn">Logout</button>
+                </form>
+            </div>
+        </div>
+    </header>
+</body>
+
+</html>

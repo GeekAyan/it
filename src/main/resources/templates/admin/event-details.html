@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Event Details</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" th:href="@{/css/admin.css}">
+</head>
+
+<body>
+    <div class="app-shell">
+        <header th:replace="~{admin/header :: adminHeader('events')}"></header>
+
+        <main class="admin-main">
+            <section class="page-card">
+                <div class="page-head">
+                    <div>
+                        <h2 th:text="${event.title}">Event title</h2>
+                        <p th:text="${event.eventType}">Event type</p>
+                    </div>
+                    <div class="actions">
+                        <a class="secondary-btn" th:href="@{/admin/events}">Back to Events</a>
+                    </div>
+                </div>
+
+                <div class="form-grid">
+                    <div class="field">
+                        <label>Event Type</label>
+                        <input type="text" th:value="${event.eventType}" readonly>
+                    </div>
+
+                    <div class="field">
+                        <label>Event Date</label>
+                        <input type="text" th:value="${event.eventDate}" readonly>
+                    </div>
+
+                    <div class="field">
+                        <label>Organizer</label>
+                        <input type="text" th:value="${event.organizer}" readonly>
+                    </div>
+
+                    <div class="field">
+                        <label>Venue</label>
+                        <input type="text" th:value="${event.venue}" readonly>
+                    </div>
+
+                    <div class="field">
+                        <label>Contact Name</label>
+                        <input type="text" th:value="${event.contactName}" readonly>
+                    </div>
+
+                    <div class="field">
+                        <label>Contact Phone</label>
+                        <input type="text" th:value="${event.contactPhone}" readonly>
+                    </div>
+
+                    <div class="field full-width">
+                        <label>Description</label>
+                        <textarea rows="6" readonly th:text="${event.description}"></textarea>
+                    </div>
+
+                    <div class="field full-width">
+                        <label>Uploaded Images</label>
+
+                        <div th:if="${#lists.isEmpty(event.images)}">
+                            No uploaded images.
+                        </div>
+
+                        <div class="table-wrap" th:if="${!#lists.isEmpty(event.images)}">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>File Name</th>
+                                        <th>Download</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr th:each="img : ${event.images}">
+                                        <td th:text="${img.imagePath}"></td>
+                                        <td>
+                                            <a class="secondary-btn"
+                                                th:href="@{/admin/files/download/{fileName}(fileName=${img.imagePath})}">
+                                                Download
+                                            </a>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+</body>
+
+</html>

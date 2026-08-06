@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Error</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" th:href="@{/css/admin.css}">
+</head>
+
+<body class="center-page">
+    <header th:replace="~{admin/header :: adminHeader('dashboard')}"></header>
+    <div class="page-card" style="max-width: 500px; text-align: center;">
+        <h1>Something went wrong</h1>
+        <p>The administrator operation could not be completed.</p>
+
+        <div class="actions">
+            <a class="primary-btn" th:href="@{/admin/dashboard}">
+                Back to Admin Dashboard
+            </a>
+
+            <a class="secondary-btn" th:href="@{/admin/events}">
+                Manage Events
+            </a>
+        </div>
+    </div>
+
+</body>
+
+</html>

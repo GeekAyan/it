@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Event Search</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" th:href="@{/css/admin.css}">
+</head>
+
+<body>
+    <div class="app-shell">
+        <header th:replace="~{admin/header :: adminHeader('events')}"></header>
+
+        <main class="admin-main">
+            <section class="page-card">
+                <div class="page-head">
+                    <div>
+                        <h2>Search Events</h2>
+                        <p>Filter by month and year or keep All to show every event.</p>
+                    </div>
+                </div>
+
+                <form th:action="@{/admin/events}" method="get">
+                    <div class="form-grid">
+                        <div class="field">
+                            <label>Month</label>
+                            <select name="month">
+                                <option value="">All</option>
+                                <option th:each="m : ${months}" th:value="${m}" th:selected="${selectedMonth == m}"
+                                    th:text="${monthNames[m]}"></option>
+                            </select>
+                        </div>
+
+                        <div class="field">
+                            <label>Year</label>
+                            <select name="year">
+                                <option value="">All</option>
+                                <option th:each="y : ${years}" th:value="${y}" th:selected="${selectedYear == y}"
+                                    th:text="${y}"></option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="actions" style="margin-top:16px;">
+                        <button type="submit" class="primary-btn">Search</button>
+                        <a class="secondary-btn" th:href="@{/admin/events}">Reset</a>
+                    </div>
+                </form>
+            </section>
+
+            <section class="page-card" style="margin-top:20px;">
+                <div class="page-head">
+                    <div>
+                        <h2>Event List</h2>
+                        <p th:text="'Total events found: ' + ${#lists.size(events)}"></p>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Event Type</th>
+                                <th>Title</th>
+                                <th>Date</th>
+                                <th>Venue</th>
+                                <th>Created By</th>
+                                <th>Images</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr th:each="event : ${events}">
+                                <td th:text="${event.id}"></td>
+                                <td th:text="${event.eventType}"></td>
+                                <td th:text="${event.title}"></td>
+                                <td th:text="${event.eventDate}"></td>
+                                <td th:text="${event.venue}"></td>
+                                <td th:text="${event.createdByEmail}"></td>
+                                <td th:text="${#lists.size(event.images)}"></td>
+                                <td>
+                                    <a class="secondary-btn" th:href="@{/admin/events/{id}(id=${event.id})}">Show</a>
+                                </td>
+                            </tr>
+                            <tr th:if="${#lists.isEmpty(events)}">
+                                <td colspan="8">No events found for the selected filter.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+</body>
+
+</html>

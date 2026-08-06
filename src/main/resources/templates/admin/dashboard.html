@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" th:href="@{/css/admin.css}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <div class="app-shell">
+        <header th:replace="~{admin/header :: adminHeader('dashboard')}"></header>
+
+        <main class="admin-main">
+            <section class="page-card">
+                <div class="page-head">
+                    <div>
+                        <h2>Dashboard</h2>
+                        <p>Overview of events and admin controls.</p>
+                    </div>
+                    <div class="actions">
+                        <a class="primary-btn" th:href="@{/admin/events}">Manage Events</a>
+                        <a class="secondary-btn" th:href="@{/admin/users}">Manage Admins</a>
+                    </div>
+                </div>
+
+                <div class="grid-2">
+                    <div class="chart-card">
+                        <h3>Total Events by Month — Current Year</h3>
+                        <div style="position:relative;height:340px;">
+                            <canvas id="monthlyEventsChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <h3>Events by Year — Last 5 Years</h3>
+                        <div style="position:relative;height:340px;">
+                            <canvas id="yearlyEventsChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script th:inline="javascript">
+        const monthlyLabels = /*[[${monthlyLabels}]]*/[];
+        const monthlyValues = /*[[${monthlyValues}]]*/[];
+        const yearlyLabels = /*[[${yearlyLabels}]]*/[];
+        const yearlyValues = /*[[${yearlyValues}]]*/[];
+
+        new Chart(document.getElementById('monthlyEventsChart'), {
+            type: 'bar',
+            data: {
+                labels: monthlyLabels,
+                datasets: [{
+                    label: 'Events',
+                    data: monthlyValues,
+                    backgroundColor: '#0b7fab',
+                    borderRadius: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, ticks: { precision: 0 } }
+                }
+            }
+        });
+
+        new Chart(document.getElementById('yearlyEventsChart'), {
+            type: 'line',
+            data: {
+                labels: yearlyLabels,
+                datasets: [{
+                    label: 'Events',
+                    data: yearlyValues,
+                    borderColor: '#0b7fab',
+                    backgroundColor: 'rgba(11,127,171,0.15)',
+                    tension: 0.35,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: true } },
+                scales: {
+                    y: { beginAtZero: true, ticks: { precision: 0 } }
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Form</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" th:href="@{/css/admin.css}">
+</head>
+
+<body>
+    <div class="app-shell">
+        <header th:replace="~{admin/header :: adminHeader('users')}"></header>
+
+        <main class="admin-main">
+            <section class="page-card">
+                <div class="page-head">
+                    <div>
+                        <h2 th:text="${userForm.id == null ? 'Add Admin' : 'Edit Admin'}"></h2>
+                        <p>Save administrator profile details.</p>
+                    </div>
+                </div>
+
+                <form th:action="@{/admin/users/save}" method="post" th:object="${userForm}">
+                    <input type="hidden" th:field="*{id}">
+
+                    <div class="form-grid">
+                        <div class="field">
+                            <label>Name (optional)</label>
+                            <input type="text" th:field="*{name}">
+                        </div>
+
+                        <div class="field">
+                            <label>Email</label>
+                            <input type="email" th:field="*{email}" required>
+                        </div>
+                    </div>
+
+                    <div class="actions" style="margin-top:16px;">
+                        <button type="submit" class="primary-btn">Save</button>
+                        <a class="secondary-btn" th:href="@{/admin/users}">Cancel</a>
+                    </div>
+                </form>
+            </section>
+        </main>
+    </div>
+</body>
+
+</html>

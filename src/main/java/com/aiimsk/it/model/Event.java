@@ -1,6 +1,7 @@
 package com.aiimsk.it.model;
 
 import jakarta.persistence.*;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -22,7 +23,7 @@ public class Event {
     private String organizer;
 
     @Column(name = "event_date")
-    private String eventDate;
+    private LocalDate eventDate;
 
     private String venue;
 
@@ -72,11 +73,11 @@ public class Event {
         this.organizer = organizer;
     }
 
-    public String getEventDate() {
+    public LocalDate getEventDate() {
         return eventDate;
     }
 
-    public void setEventDate(String eventDate) {
+    public void setEventDate(LocalDate eventDate) {
         this.eventDate = eventDate;
     }
 

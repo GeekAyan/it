@@ -24,7 +24,9 @@ public class SecurityConfig {
         http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/css/**", "/images/**", "/js/**").permitAll()
-                        .requestMatchers("/login", "/request-otp", "/verify-otp", "/access-denied").permitAll()
+                        .requestMatchers("/login", "/request-otp", "/verify-otp", "/access-denied",
+                                "/admin-access-denied")
+                        .permitAll()
                         .requestMatchers("/admin/**").hasRole("ADMIN")
                         .requestMatchers("/", "/save", "/events").hasAnyRole("USER", "ADMIN")
                         .anyRequest().authenticated())
@@ -41,7 +43,8 @@ public class SecurityConfig {
                         .clearAuthentication(true)
                         .deleteCookies("JSESSIONID")
                         .permitAll())
-                .exceptionHandling(ex -> ex.accessDeniedPage("/access-denied"));
+                .exceptionHandling(ex -> ex
+                        .accessDeniedPage("/admin-access-denied"));
 
         return http.build();
     }

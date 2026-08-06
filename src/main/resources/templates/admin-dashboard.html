@@ -1,46 +1,106 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<html xmlns:th="http://www.thymeleaf.org">
 
 <head>
     <meta charset="UTF-8">
     <title>Admin Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" th:href="@{/css/main.css}">
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f4f7fb;
+            color: #1f2937;
+        }
+
+        .topbar {
+            background: #0f172a;
+            color: white;
+            padding: 18px 28px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 28px;
+        }
+
+        .hero {
+            background: white;
+            border-radius: 16px;
+            padding: 28px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+            margin-bottom: 24px;
+        }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 18px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 22px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 18px;
+            border-radius: 10px;
+            text-decoration: none;
+            color: white;
+            background: #2563eb;
+            margin-right: 10px;
+        }
+
+        .btn.secondary {
+            background: #475569;
+        }
+
+        .btn.danger {
+            background: #dc2626;
+        }
+    </style>
 </head>
 
-<body class="app-body">
-
+<body>
     <div class="topbar">
-        <div class="topbar-left">
-            <img th:src="@{/images/aiims-logo.png}" alt="AIIMS Logo" class="topbar-logo">
-            <div>
-                <h2 class="topbar-title">Admin Dashboard</h2>
-                <p class="topbar-subtitle">Manage event records and portal operations</p>
-            </div>
-        </div>
+        <div><strong>AIIMS Kalyani</strong> Admin Panel</div>
+        <div>Welcome, <span th:text="${adminUser}"></span></div>
+    </div>
 
-        <div class="topbar-right">
-            <div class="user-badge" th:text="${adminUser}"></div>
-            <a class="btn secondary-btn" th:href="@{/events}">Manage Events</a>
-            <form th:action="@{/logout}" method="post" style="margin:0;">
-                <button type="submit" class="logout-btn">Logout</button>
+    <div class="container">
+        <div class="hero">
+            <h1>Admin Dashboard</h1>
+            <p>Manage event submissions and monitor portal activity.</p>
+            <a th:href="@{/admin/events}" class="btn">Manage Events</a>
+
+            <form th:action="@{/logout}" method="post" style="display:inline;">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button type="submit" class="btn danger">Logout</button>
             </form>
         </div>
-    </div>
 
-    <div class="form-page">
-        <div class="form-card">
-            <div class="title left-align">
-                <h2>Welcome, Admin</h2>
-                <p sec:authorize="hasRole('ADMIN')">You can access administrator-only features from here.</p>
+        <div class="cards">
+            <div class="card">
+                <h3>Event Management</h3>
+                <p>Review and manage all submitted events.</p>
+                <a class="btn" th:href="@{/admin/events}">Search and Manage Events</a>
+                
             </div>
 
-            <div class="form-actions">
-                <a class="btn" th:href="@{/events}">Open Event Management</a>
+            <div class="card">
+                <h3>Admin Identity</h3>
+                <p th:text="${adminUser}"></p>
             </div>
         </div>
     </div>
-
 </body>
 
 </html>

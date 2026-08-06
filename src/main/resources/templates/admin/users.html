@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Manage Admins</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" th:href="@{/css/admin.css}">
+</head>
+
+<body>
+
+    <div class="app-shell">
+        <header th:replace="~{admin/header :: adminHeader('users')}"></header>
+
+        <main class="admin-main">
+            <section class="page-card">
+                <div class="page-head">
+                    <div>
+                        <h2>Manage Admins</h2>
+                        <p>Add, edit, or remove administrator access.</p>
+                    </div>
+
+                    <a class="primary-btn" th:href="@{/admin/users/new}">
+                        Add Admin
+                    </a>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            <tr th:each="user : ${users}">
+                                <td th:text="${user.id}">1</td>
+                                <td th:text="${user.email}">admin@example.com</td>
+                                <td>
+                                    <span class="badge" th:text="${user.role}">ADMIN</span>
+                                </td>
+                                <td>
+                                    <div class="actions">
+                                        <a class="secondary-btn" th:href="@{/admin/users/edit/{id}(id=${user.id})}">
+                                            Edit
+                                        </a>
+
+                                        <form th:action="@{/admin/users/delete/{id}(id=${user.id})}" method="post"
+                                            style="margin: 0;" onsubmit="return confirm('Delete this admin user?');">
+
+                                            <button type="submit" class="danger-btn">
+                                                Delete
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+
+                            <tr th:if="${#lists.isEmpty(users)}">
+                                <td colspan="4">No admin users found.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+</body>
+
+</html>
