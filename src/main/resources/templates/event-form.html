@@ -21,6 +21,7 @@
 
         <div class="topbar-right">
             <div class="user-badge" th:text="${loggedInUser}"></div>
+            <a th:href="@{/events}" class="btn btn-link">My Events</a>
             <form th:action="@{/logout}" method="post" style="display:inline;">
                 <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                 <button type="submit" class="logout-btn">Logout</button>
@@ -38,7 +39,8 @@
             <p class="success-msg" th:if="${message}" th:text="${message}"></p>
             <p class="error-msg" th:if="${error}" th:text="${error}"></p>
 
-            <form th:action="@{/save}" method="post" enctype="multipart/form-data" th:object="${event}">
+            <form id="eventForm" th:action="@{/save}" method="post" enctype="multipart/form-data" th:object="${event}">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                 <div class="form-grid">
                     <div class="field">
                         <label>Event Type</label>
@@ -85,35 +87,161 @@
 
                     <div class="field">
                         <label>Contact Phone</label>
-                        <input type="text" th:field="*{contactPhone}" pattern="^\+?\d{10,15}$" title="Enter a valid phone number" required>
+                        <input type="tel" th:field="*{contactPhone}" id="contactPhone" required
+                            placeholder="e.g. +91 98765 43210" title="Enter a valid phone number">
+                        <small class="help-text" id="phoneHelp">10-15 digits, optionally starting with +. Spaces, dashes and parentheses allowed.</small>
                     </div>
 
                     <div class="field full-width">
                         <label>Upload Images</label>
-                        <input type="file" name="imageFiles" accept="image/*" multiple>
-                        <small class="help-text">Maximum 5 images, total combined size up to 100 MB.</small>
+                        <input type="file" id="imageInput" name="imageFiles" accept="image/*" multiple>
+                        <small class="help-text">Maximum 5 images, total combined size up to 100 MB. Click the ✕ on a thumbnail to remove it.</small>
+
+                        <div id="previewContainer" class="image-preview-grid"></div>
                     </div>
                 </div>
                 <input type="hidden" name="formToken" th:value="${formToken}">
                 <div class="form-actions">
                     <button type="submit" class="btn" id="saveBtn">Save Event</button>
-                    <button type="reset" class="btn secondary-btn">Reset Form</button>
+                    <button type="reset" class="btn secondary-btn" id="resetBtn">Reset Form</button>
                 </div>
             </form>
         </div>
     </div>
 <script>
-    const eventForm = document.getElementById('eventForm');
-    const saveBtn = document.getElementById('saveBtn');
+    (function () {
+        const eventForm = document.getElementById('eventForm');
+        const saveBtn = document.getElementById('saveBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const phoneInput = document.getElementById('contactPhone');
+        const phoneHelp = document.getElementById('phoneHelp');
+        const imageInput = document.getElementById('imageInput');
+        const previewContainer = document.getElementById('previewContainer');
 
-    if (eventForm && saveBtn) {
-        eventForm.addEventListener('submit', function () {
+        // ---- Phone number validation ----
+        const phonePattern = /^\+?[0-9\s\-()]{10,15}$/;
+
+        function validatePhone() {
+            const val = phoneInput.value.trim();
+            const valid = phonePattern.test(val);
+            if (!valid) {
+                phoneHelp.textContent = 'Invalid phone number. Use 10-15 digits, optionally starting with +.';
+                phoneHelp.style.color = '#c0392b';
+                return false;
+            }
+            phoneHelp.textContent = '10-15 digits, optionally starting with +. Spaces, dashes and parentheses allowed.';
+            phoneHelp.style.color = '';
+            return true;
+        }
+
+        phoneInput.addEventListener('input', validatePhone);
+
+        // ---- Image preview with per-image cancel ----
+        let selectedFiles = [];
+
+        function renderPreviews() {
+            previewContainer.innerHTML = '';
+            selectedFiles.forEach(function (file, index) {
+                const card = document.createElement('div');
+                card.className = 'image-preview-item';
+
+                const img = document.createElement('img');
+                img.className = 'image-preview-thumb';
+                img.alt = file.name;
+                img.title = file.name + (file.size ? ' (' + formatSize(file.size) + ')' : '');
+
+                // Use object URL for preview
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+
+                const info = document.createElement('div');
+                info.className = 'image-preview-info';
+                info.textContent = file.name;
+
+                const cancelBtn = document.createElement('button');
+                cancelBtn.type = 'button';
+                cancelBtn.className = 'image-cancel-btn';
+                cancelBtn.innerHTML = '&times;';
+                cancelBtn.title = 'Remove ' + file.name;
+                cancelBtn.addEventListener('click', function () {
+                    selectedFiles.splice(index, 1);
+                    syncFilesToInput();
+                    renderPreviews();
+                });
+
+                card.appendChild(img);
+                card.appendChild(cancelBtn);
+                card.appendChild(info);
+                previewContainer.appendChild(card);
+            });
+            previewContainer.style.display = selectedFiles.length ? 'grid' : 'none';
+        }
+
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        // Sync the selected files back into the file input (DataTransfer)
+        function syncFilesToInput() {
+            if (!imageInput) return;
+            const dt = new DataTransfer();
+            selectedFiles.forEach(function (f) { dt.items.add(f); });
+            imageInput.files = dt.files;
+        }
+
+        imageInput.addEventListener('change', function () {
+            const incoming = Array.from(imageInput.files);
+            // Enforce max 5
+            const remaining = 5 - selectedFiles.length;
+            if (remaining <= 0) {
+                imageInput.value = '';
+                alert('You can upload maximum 5 images only.');
+                return;
+            }
+            if (incoming.length > remaining) {
+                alert('You can upload maximum 5 images only. Extra images were ignored.');
+            }
+            incoming.slice(0, remaining).forEach(function (file) {
+                if (file.type && !file.type.startsWith('image/')) {
+                    alert('Only image files are allowed: ' + file.name);
+                    return;
+                }
+                selectedFiles.push(file);
+            });
+            syncFilesToInput();
+            renderPreviews();
+        });
+
+        // Reset clears previews
+        resetBtn.addEventListener('click', function () {
+            selectedFiles = [];
+            previewContainer.innerHTML = '';
+            previewContainer.style.display = 'none';
+            imageInput.value = '';
+        });
+
+        // Validate phone before submit
+        eventForm.addEventListener('submit', function (e) {
+            if (!validatePhone()) {
+                e.preventDefault();
+                phoneInput.focus();
+                alert('Please enter a valid phone number.');
+                return;
+            }
             saveBtn.disabled = true;
             saveBtn.textContent = 'Saving...';
         });
-    }
+
+        // Initial render (in case of form re-render with errors)
+        renderPreviews();
+    })();
 </script>
-   
+
 </body>
 
 </html>

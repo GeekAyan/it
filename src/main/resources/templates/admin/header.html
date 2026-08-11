@@ -20,8 +20,6 @@
                         th:classappend="${activePage == 'events'} ? ' active' : ''">Manage Events</a>
                     <a th:href="@{/admin/users}" class="nav-link"
                         th:classappend="${activePage == 'users'} ? ' active' : ''">Manage Admins</a>
-                    <a th:href="@{/admin/profile}" class="nav-link"
-                        th:classappend="${activePage == 'profile'} ? ' active' : ''">Admin Profile</a>
                 </nav>
 
                 <div class="nav-spacer"></div>
@@ -29,6 +27,7 @@
                 <div class="user-pill" th:text="${adminUser}">admin@example.com</div>
 
                 <form th:action="@{/logout}" method="post" style="margin:0;">
+                    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                     <button type="submit" class="logout-btn">Logout</button>
                 </form>
             </div>

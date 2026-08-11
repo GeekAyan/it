@@ -67,26 +67,25 @@
                             No uploaded images.
                         </div>
 
-                        <div class="table-wrap" th:if="${!#lists.isEmpty(event.images)}">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>File Name</th>
-                                        <th>Download</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr th:each="img : ${event.images}">
-                                        <td th:text="${img.imagePath}"></td>
-                                        <td>
-                                            <a class="secondary-btn"
-                                                th:href="@{/admin/files/download/{fileName}(fileName=${img.imagePath})}">
-                                                Download
-                                            </a>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                        <div th:if="${!#lists.isEmpty(event.images)}">
+                            <div class="actions" style="margin-bottom:16px;">
+                                <a class="primary-btn" th:href="@{/admin/events/{id}/download-all(id=${event.id})}">
+                                    Download All as ZIP
+                                </a>
+                            </div>
+
+                            <div class="image-gallery">
+                                <div class="image-gallery-item" th:each="img, stat : ${event.images}">
+                                    <a th:href="@{/admin/files/download/{fileName}(fileName=${img.imagePath})}"
+                                        title="Click to download">
+                                        <img class="image-gallery-thumb"
+                                            th:src="@{/admin/files/view/{fileName}(fileName=${img.imagePath})}"
+                                            th:alt="${img.imagePath}"
+                                            loading="lazy">
+                                    </a>
+                                    <div class="image-gallery-info" th:text="${stat.count} + '. ' + ${img.imagePath}"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

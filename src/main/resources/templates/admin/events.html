@@ -27,8 +27,8 @@
                             <label>Month</label>
                             <select name="month">
                                 <option value="">All</option>
-                                <option th:each="m : ${months}" th:value="${m}" th:selected="${selectedMonth == m}"
-                                    th:text="${monthNames[m]}"></option>
+                                <option th:each="mo : ${monthOptions}" th:value="${mo.num}"
+                                    th:selected="${selectedMonth == mo.num}" th:text="${mo.name}"></option>
                             </select>
                         </div>
 

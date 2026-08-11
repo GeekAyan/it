@@ -28,7 +28,7 @@ public class SecurityConfig {
                                 "/admin-access-denied")
                         .permitAll()
                         .requestMatchers("/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/", "/save", "/events").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers("/", "/save", "/events", "/events/**", "/files/**", "/files/view/**").hasAnyRole("USER", "ADMIN")
                         .anyRequest().authenticated())
                 .formLogin(form -> form
                         .loginPage("/login")

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <title>My Events</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" th:href="@{/css/main.css}">
+</head>
+
+<body class="app-body">
+
+    <div class="topbar">
+        <div class="topbar-left">
+            <img th:src="@{/images/aiims-logo.png}" alt="AIIMS Logo" class="topbar-logo">
+            <div>
+                <h2 class="topbar-title">AIIMS Kalyani Event Submission Portal</h2>
+                <p class="topbar-subtitle">Conference, workshop, seminar and institutional event details</p>
+            </div>
+        </div>
+
+        <div class="topbar-right">
+            <div class="user-badge" th:text="${loggedInUser}"></div>
+            <a th:href="@{/}" class="btn btn-link">Submit Event</a>
+            <form th:action="@{/logout}" method="post" style="display:inline;">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button type="submit" class="logout-btn">Logout</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="form-page">
+        <div class="form-card">
+            <div class="title left-align">
+                <h2>My Submitted Events</h2>
+                <p>All events you have submitted. Click View to see full details.</p>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Event Type</th>
+                            <th>Title</th>
+                            <th>Date</th>
+                            <th>Venue</th>
+                            <th>Images</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="event : ${events}">
+                            <td th:text="${event.id}"></td>
+                            <td th:text="${event.eventType}"></td>
+                            <td th:text="${event.title}"></td>
+                            <td th:text="${event.eventDate}"></td>
+                            <td th:text="${event.venue}"></td>
+                            <td th:text="${#lists.size(event.images)}"></td>
+                            <td>
+                                <a class="btn btn-link" th:href="@{/events/{id}(id=${event.id})}">View</a>
+                            </td>
+                        </tr>
+                        <tr th:if="${#lists.isEmpty(events)}">
+                            <td colspan="7">No events submitted yet.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="form-actions" style="margin-top:20px;">
+                <a class="btn" th:href="@{/}">Back to Form</a>
+            </div>
+        </div>
+    </div>
+
+</body>
+
+</html>

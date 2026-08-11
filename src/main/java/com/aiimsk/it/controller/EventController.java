@@ -5,7 +5,12 @@ import com.aiimsk.it.model.EventImage;
 import com.aiimsk.it.repository.EventRepository;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -19,6 +24,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Controller
@@ -76,6 +83,16 @@ public class EventController {
         session.removeAttribute("eventFormToken");
         System.out.println("Token accepted and removed from session");
 
+        // Server-side phone number validation
+        String phone = event.getContactPhone() != null ? event.getContactPhone().trim() : "";
+        if (!phone.matches("^\\+?[0-9\\s\\-()]{10,15}$")) {
+            redirectAttributes.addFlashAttribute("error",
+                    "Please enter a valid phone number (10-15 digits, optionally starting with +).");
+            redirectAttributes.addFlashAttribute("event", event);
+            return "redirect:/";
+        }
+        event.setContactPhone(phone);
+
         int nonEmptyFiles = 0;
         for (MultipartFile file : imageFiles) {
             if (!file.isEmpty()) {
@@ -131,8 +148,132 @@ public class EventController {
     @GetMapping("/events")
     public String listEvents(Model model, Authentication authentication) {
         System.out.println("GET /events auth = " + (authentication != null ? authentication.getName() : "null"));
-        model.addAttribute("loggedInUser", authentication.getName());
-        model.addAttribute("events", eventRepository.findAll());
+        String email = authentication.getName();
+        model.addAttribute("loggedInUser", email);
+        model.addAttribute("events", eventRepository.findByCreatedByEmailOrderByEventDateDesc(email));
         return "event-list";
+    }
+
+    @GetMapping("/events/{id}")
+    public String viewEvent(@PathVariable Long id,
+            Authentication authentication,
+            Model model) {
+
+        Event event = eventRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid event id: " + id));
+
+        // Only allow the owner to view their own event
+        if (!event.getCreatedByEmail().equalsIgnoreCase(authentication.getName())) {
+            return "redirect:/events";
+        }
+
+        model.addAttribute("loggedInUser", authentication.getName());
+        model.addAttribute("event", event);
+        return "event-detail";
+    }
+
+    @GetMapping("/files/view/{fileName:.+}")
+    public ResponseEntity<Resource> viewFile(@PathVariable String fileName,
+            Authentication authentication) throws Exception {
+
+        // Find the event that owns this file and verify the current user owns it
+        Optional<Event> ownerEvent = eventRepository.findAll().stream()
+                .filter(e -> e.getImages().stream()
+                        .anyMatch(img -> img.getImagePath().equals(fileName)))
+                .findFirst();
+
+        if (ownerEvent.isEmpty() || !ownerEvent.get().getCreatedByEmail().equalsIgnoreCase(authentication.getName())) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Path filePath = Paths.get(uploadDir).resolve(fileName).normalize();
+        Resource resource = new UrlResource(filePath.toUri());
+
+        if (!resource.exists() || !resource.isReadable()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_JPEG)
+                .body(resource);
+    }
+
+    @GetMapping("/files/download/{fileName:.+}")
+    public ResponseEntity<Resource> downloadFile(@PathVariable String fileName,
+            Authentication authentication) throws Exception {
+
+        // Find the event that owns this file and verify the current user owns it
+        Optional<Event> ownerEvent = eventRepository.findAll().stream()
+                .filter(e -> e.getImages().stream()
+                        .anyMatch(img -> img.getImagePath().equals(fileName)))
+                .findFirst();
+
+        if (ownerEvent.isEmpty() || !ownerEvent.get().getCreatedByEmail().equalsIgnoreCase(authentication.getName())) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Path filePath = Paths.get(uploadDir).resolve(fileName).normalize();
+        Resource resource = new UrlResource(filePath.toUri());
+
+        if (!resource.exists() || !resource.isReadable()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + resource.getFilename() + "\"")
+                .body(resource);
+    }
+
+    @GetMapping("/events/{id}/download-all")
+    public ResponseEntity<byte[]> downloadAllImages(@PathVariable Long id,
+            Authentication authentication) throws IOException {
+
+        Event event = eventRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid event id: " + id));
+
+        // Only allow the owner to download their own event's images
+        if (!event.getCreatedByEmail().equalsIgnoreCase(authentication.getName())) {
+            return ResponseEntity.notFound().build();
+        }
+
+        List<EventImage> images = event.getImages();
+
+        if (images == null || images.isEmpty()) {
+            return ResponseEntity.noContent().build();
+        }
+
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(baos)) {
+            for (int i = 0; i < images.size(); i++) {
+                String imagePath = images.get(i).getImagePath();
+                Path filePath = Paths.get(uploadDir).resolve(imagePath).normalize();
+                File file = filePath.toFile();
+
+                if (!file.exists() || !file.isFile()) {
+                    continue;
+                }
+
+                String entryName = (i + 1) + "_" + file.getName();
+                zos.putNextEntry(new java.util.zip.ZipEntry(entryName));
+
+                try (java.io.FileInputStream fis = new java.io.FileInputStream(file)) {
+                    byte[] buffer = new byte[8192];
+                    int len;
+                    while ((len = fis.read(buffer)) > 0) {
+                        zos.write(buffer, 0, len);
+                    }
+                }
+                zos.closeEntry();
+            }
+        }
+
+        byte[] zipBytes = baos.toByteArray();
+        String zipName = "event_" + id + "_images.zip";
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + zipName + "\"")
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(zipBytes);
     }
 }

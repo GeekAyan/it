@@ -32,6 +32,7 @@
                 <p class="success-msg" th:if="${param.logout}">You have been logged out successfully.</p>
 
                 <form th:action="@{/request-otp}" method="post">
+                    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                     <div class="field">
                         <label>Email</label>
                         <input type="email" name="email" required>
