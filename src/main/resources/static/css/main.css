@@ -171,12 +171,25 @@ body {
     font-size: 14px;
 }
 
+.optional-tag {
+    font-weight: 400;
+    font-size: 12px;
+    color: #64748b;
+    background: #f1f5f9;
+    border: 1px solid #dbe4ec;
+    border-radius: 999px;
+    padding: 2px 10px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
 .field input[type="email"],
 .field input[type="text"],
 .field input[type="password"],
 .field input[type="date"],
 .field input[type="file"],
 .field input[type="tel"],
+.field input[type="url"],
 .field select,
 .field textarea {
     width: 100%;

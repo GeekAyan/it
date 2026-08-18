@@ -49,12 +49,12 @@
                 </div>
 
                 <div class="field">
-                    <label>Organizer</label>
+                    <label>Organizing Department</label>
                     <input type="text" th:value="${event.organizer}" readonly>
                 </div>
 
                 <div class="field">
-                    <label>Venue</label>
+                    <label>Target Audience</label>
                     <input type="text" th:value="${event.venue}" readonly>
                 </div>
 
@@ -69,8 +69,13 @@
                 </div>
 
                 <div class="field full-width">
-                    <label>Description</label>
+                    <label>Description (Less than 70 words)</label>
                     <textarea rows="6" readonly th:text="${event.description}"></textarea>
+                </div>
+
+                <div class="field full-width">
+                    <label>Google Drive Link</label>
+                    <input type="text" th:value="${event.googleDriveLink != null ? event.googleDriveLink : 'Not provided'}" readonly>
                 </div>
 
                 <div class="field full-width">

@@ -66,30 +66,38 @@
                     </div>
 
                     <div class="field">
-                        <label>Organizer</label>
+                        <label>Organizing Department</label>
                         <input type="text" th:field="*{organizer}" required>
                     </div>
 
                     <div class="field">
-                        <label>Venue</label>
+                        <label>Target Audience</label>
                         <input type="text" th:field="*{venue}" required>
                     </div>
 
                     <div class="field full-width">
-                        <label>Description</label>
-                        <textarea th:field="*{description}" rows="5" required></textarea>
+                        <label>Description (Less than 70 words)</label>
+                        <textarea th:field="*{description}" id="descriptionInput" rows="5" required></textarea>
+                        <small class="help-text" id="descriptionHelp">Please keep the description under 70 words.</small>
                     </div>
 
                     <div class="field">
-                        <label>Contact Name</label>
-                        <input type="text" th:field="*{contactName}" required>
+                        <label>Contact Name <span class="optional-tag">(Optional)</span></label>
+                        <input type="text" th:field="*{contactName}" placeholder="e.g. Dr. Jane Doe">
                     </div>
 
                     <div class="field">
-                        <label>Contact Phone</label>
-                        <input type="tel" th:field="*{contactPhone}" id="contactPhone" required
+                        <label>Contact Phone <span class="optional-tag">(Optional)</span></label>
+                        <input type="tel" th:field="*{contactPhone}" id="contactPhone"
                             placeholder="e.g. +91 98765 43210" title="Enter a valid phone number">
                         <small class="help-text" id="phoneHelp">10-15 digits, optionally starting with +. Spaces, dashes and parentheses allowed.</small>
+                    </div>
+
+                    <div class="field full-width">
+                        <label>Google Drive Link</label>
+                        <input type="url" th:field="*{googleDriveLink}" id="googleDriveLink"
+                            placeholder="https://drive.google.com/..." title="Enter a publicly accessible Google Drive link">
+                        <small class="help-text">Please provide a publicly accessible Google Drive link (anyone with the link can view).</small>
                     </div>
 
                     <div class="field full-width">
@@ -115,26 +123,72 @@
         const resetBtn = document.getElementById('resetBtn');
         const phoneInput = document.getElementById('contactPhone');
         const phoneHelp = document.getElementById('phoneHelp');
+        const descriptionInput = document.getElementById('descriptionInput');
+        const descriptionHelp = document.getElementById('descriptionHelp');
+        const googleDriveInput = document.getElementById('googleDriveLink');
         const imageInput = document.getElementById('imageInput');
         const previewContainer = document.getElementById('previewContainer');
 
-        // ---- Phone number validation ----
+        // ---- Phone number validation (optional field) ----
         const phonePattern = /^\+?[0-9\s\-()]{10,15}$/;
 
         function validatePhone() {
             const val = phoneInput.value.trim();
+            if (val === '') {
+                phoneHelp.textContent = 'Optional. 10-15 digits, optionally starting with +. Spaces, dashes and parentheses allowed.';
+                phoneHelp.style.color = '';
+                return true;
+            }
             const valid = phonePattern.test(val);
             if (!valid) {
                 phoneHelp.textContent = 'Invalid phone number. Use 10-15 digits, optionally starting with +.';
                 phoneHelp.style.color = '#c0392b';
                 return false;
             }
-            phoneHelp.textContent = '10-15 digits, optionally starting with +. Spaces, dashes and parentheses allowed.';
+            phoneHelp.textContent = 'Optional. 10-15 digits, optionally starting with +. Spaces, dashes and parentheses allowed.';
             phoneHelp.style.color = '';
             return true;
         }
 
         phoneInput.addEventListener('input', validatePhone);
+
+        // ---- Description word count validation (max 70 words) ----
+        function countWords(text) {
+            const trimmed = text.trim();
+            if (trimmed === '') return 0;
+            return trimmed.split(/\s+/).length;
+        }
+
+        function validateDescription() {
+            const words = countWords(descriptionInput.value);
+            if (words > 70) {
+                descriptionHelp.textContent = 'Description is ' + words + ' words. Please keep it under 70 words.';
+                descriptionHelp.style.color = '#c0392b';
+                return false;
+            }
+            descriptionHelp.textContent = 'Please keep the description under 70 words. Current word count: ' + words;
+            descriptionHelp.style.color = '';
+            return true;
+        }
+
+        descriptionInput.addEventListener('input', validateDescription);
+
+        // ---- Google Drive link validation (optional field) ----
+        const drivePattern = /^https:\/\/drive\.google\.com\/.*$/i;
+
+        function validateDriveLink() {
+            const val = googleDriveInput.value.trim();
+            if (val === '') return true;
+            const valid = drivePattern.test(val);
+            if (!valid) {
+                googleDriveInput.setCustomValidity('Please enter a valid Google Drive link (e.g. https://drive.google.com/...).');
+            } else {
+                googleDriveInput.setCustomValidity('');
+            }
+            return valid;
+        }
+
+        googleDriveInput.addEventListener('input', validateDriveLink);
 
         // ---- Image preview with per-image cancel ----
         let selectedFiles = [];
@@ -225,7 +279,7 @@
             imageInput.value = '';
         });
 
-        // Validate phone before submit
+        // Validate before submit
         eventForm.addEventListener('submit', function (e) {
             if (!validatePhone()) {
                 e.preventDefault();
@@ -233,14 +287,29 @@
                 alert('Please enter a valid phone number.');
                 return;
             }
+            if (!validateDescription()) {
+                e.preventDefault();
+                descriptionInput.focus();
+                alert('Please keep the description under 70 words.');
+                return;
+            }
+            if (!validateDriveLink()) {
+                e.preventDefault();
+                googleDriveInput.focus();
+                alert('Please enter a valid Google Drive link (e.g. https://drive.google.com/...).');
+                return;
+            }
             saveBtn.disabled = true;
             saveBtn.textContent = 'Saving...';
         });
 
-        // Initial render (in case of form re-render with errors)
+        // Initial validation
+        validateDescription();
+        validatePhone();
         renderPreviews();
     })();
 </script>
+
 
 </body>
 

@@ -6,10 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "events", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_event_unique_entry", columnNames = { "title", "event_date", "venue",
-                "created_by_email" })
-})
+@Table(name = "events")
 public class Event {
 
     @Id
@@ -33,6 +30,9 @@ public class Event {
     private String contactName;
 
     private String contactPhone;
+
+    @Column(name = "google_drive_link", length = 1000)
+    private String googleDriveLink;
 
     @Column(name = "created_by_email")
     private String createdByEmail;
@@ -111,6 +111,14 @@ public class Event {
 
     public void setContactPhone(String contactPhone) {
         this.contactPhone = contactPhone;
+    }
+
+    public String getGoogleDriveLink() {
+        return googleDriveLink;
+    }
+
+    public void setGoogleDriveLink(String googleDriveLink) {
+        this.googleDriveLink = googleDriveLink;
     }
 
     public String getCreatedByEmail() {

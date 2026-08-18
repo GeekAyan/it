@@ -83,15 +83,19 @@ public class EventController {
         session.removeAttribute("eventFormToken");
         System.out.println("Token accepted and removed from session");
 
-        // Server-side phone number validation
+        // Server-side phone number validation (optional field)
         String phone = event.getContactPhone() != null ? event.getContactPhone().trim() : "";
-        if (!phone.matches("^\\+?[0-9\\s\\-()]{10,15}$")) {
+        if (!phone.isEmpty() && !phone.matches("^\\+?[0-9\\s\\-()]{10,15}$")) {
             redirectAttributes.addFlashAttribute("error",
                     "Please enter a valid phone number (10-15 digits, optionally starting with +).");
             redirectAttributes.addFlashAttribute("event", event);
             return "redirect:/";
         }
-        event.setContactPhone(phone);
+        event.setContactPhone(phone.isEmpty() ? null : phone);
+
+        // Normalize optional contact name
+        String contactName = event.getContactName() != null ? event.getContactName().trim() : "";
+        event.setContactName(contactName.isEmpty() ? null : contactName);
 
         int nonEmptyFiles = 0;
         for (MultipartFile file : imageFiles) {
@@ -138,8 +142,8 @@ public class EventController {
             System.out.println("Event saved successfully");
         } catch (DataIntegrityViolationException ex) {
             redirectAttributes.addFlashAttribute("error",
-                    "This event already exists for the same title, date, venue, and user.");
-            System.out.println("DB constraint prevented save");
+                    "The event could not be saved. Please try again.");
+            System.out.println("DB constraint prevented save: " + ex.getMessage());
         }
 
         return "redirect:/";
