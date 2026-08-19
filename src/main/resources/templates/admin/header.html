@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 
 <body>
     <header th:fragment="adminHeader(activePage)">
@@ -18,7 +18,7 @@
                         th:classappend="${activePage == 'dashboard'} ? ' active' : ''">Dashboard</a>
                     <a th:href="@{/admin/events}" class="nav-link"
                         th:classappend="${activePage == 'events'} ? ' active' : ''">Manage Events</a>
-                    <a th:href="@{/admin/users}" class="nav-link"
+                    <a sec:authorize="hasRole('ADMIN')" th:href="@{/admin/users}" class="nav-link"
                         th:classappend="${activePage == 'users'} ? ' active' : ''">Manage Admins</a>
                 </nav>
 

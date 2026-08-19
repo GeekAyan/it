@@ -16,8 +16,8 @@
             <section class="page-card">
                 <div class="page-head">
                     <div>
-                        <h2 th:text="${userForm.id == null ? 'Add Admin' : 'Edit Admin'}"></h2>
-                        <p>Save administrator profile details.</p>
+                        <h2 th:text="${userForm.id == null ? 'Add User' : 'Edit User'}"></h2>
+                        <p>Save administrator or editor profile details.</p>
                     </div>
                 </div>
 
@@ -31,6 +31,14 @@
                         <div class="field">
                             <label>Email</label>
                             <input type="email" th:field="*{email}" required>
+                        </div>
+
+                        <div class="field">
+                            <label>Role</label>
+                            <select th:field="*{role}">
+                                <option value="ADMIN">Admin</option>
+                                <option value="EDITOR">Editor</option>
+                            </select>
                         </div>
                     </div>
 

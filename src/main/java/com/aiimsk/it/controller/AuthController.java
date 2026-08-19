@@ -125,8 +125,8 @@ public class AuthController {
 
         session.removeAttribute("OTP_" + email);
 
-        if ("ADMIN".equalsIgnoreCase(user.getRole())) {
-            System.out.println("Redirecting ADMIN to dashboard");
+        if ("ADMIN".equalsIgnoreCase(user.getRole()) || "EDITOR".equalsIgnoreCase(user.getRole())) {
+            System.out.println("Redirecting ADMIN/EDITOR to dashboard");
             return "redirect:/admin/dashboard";
         }
 

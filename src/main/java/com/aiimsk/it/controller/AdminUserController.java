@@ -42,39 +42,45 @@ public class AdminUserController {
             RedirectAttributes redirectAttributes) {
 
         String email = userForm.getEmail() != null ? userForm.getEmail().trim().toLowerCase() : "";
+        String role = userForm.getRole() != null ? userForm.getRole().trim().toUpperCase() : "ADMIN";
 
         if (email.isBlank()) {
             redirectAttributes.addFlashAttribute("error", "Email is required.");
             return "redirect:/admin/users/new";
         }
 
+        if (!role.equals("ADMIN") && !role.equals("EDITOR")) {
+            redirectAttributes.addFlashAttribute("error", "Invalid role selected.");
+            return "redirect:/admin/users/new";
+        }
+
         Optional<AppUser> existing = userRepository.findByEmail(email);
 
         if (userForm.getId() != null) {
-            // Editing an existing admin
+            // Editing an existing admin/editor
             AppUser existingUser = userRepository.findById(userForm.getId()).orElse(null);
             if (existingUser == null) {
                 redirectAttributes.addFlashAttribute("error", "Admin user not found.");
                 return "redirect:/admin/users";
             }
             existingUser.setEmail(email);
-            existingUser.setRole("ADMIN");
+            existingUser.setRole(role);
             userRepository.save(existingUser);
-            redirectAttributes.addFlashAttribute("message", "Admin updated successfully.");
+            redirectAttributes.addFlashAttribute("message", "User updated successfully.");
         } else {
-            // Adding a new admin
+            // Adding a new admin/editor
             if (existing.isPresent()) {
-                // Promote existing user (USER) to ADMIN
+                // Promote existing user (USER) to ADMIN/EDITOR
                 AppUser user = existing.get();
-                user.setRole("ADMIN");
+                user.setRole(role);
                 userRepository.save(user);
-                redirectAttributes.addFlashAttribute("message", "User promoted to ADMIN successfully.");
+                redirectAttributes.addFlashAttribute("message", "User promoted to " + role + " successfully.");
             } else {
                 AppUser newAdmin = new AppUser();
                 newAdmin.setEmail(email);
-                newAdmin.setRole("ADMIN");
+                newAdmin.setRole(role);
                 userRepository.save(newAdmin);
-                redirectAttributes.addFlashAttribute("message", "Admin added successfully.");
+                redirectAttributes.addFlashAttribute("message", role + " added successfully.");
             }
         }
 

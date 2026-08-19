@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 
 <head>
     <meta charset="UTF-8">
@@ -22,7 +22,7 @@
                     </div>
                     <div class="actions">
                         <a class="primary-btn" th:href="@{/admin/events}">Manage Events</a>
-                        <a class="secondary-btn" th:href="@{/admin/users}">Manage Admins</a>
+                        <a sec:authorize="hasRole('ADMIN')" class="secondary-btn" th:href="@{/admin/users}">Manage Admins</a>
                     </div>
                 </div>
 
