@@ -49,7 +49,7 @@ public class AdminUserController {
             return "redirect:/admin/users/new";
         }
 
-        if (!role.equals("ADMIN") && !role.equals("EDITOR")) {
+        if (!role.equals("ADMIN") && !role.equals("EDITOR") && !role.equals("USER")) {
             redirectAttributes.addFlashAttribute("error", "Invalid role selected.");
             return "redirect:/admin/users/new";
         }
@@ -66,15 +66,15 @@ public class AdminUserController {
             existingUser.setEmail(email);
             existingUser.setRole(role);
             userRepository.save(existingUser);
-            redirectAttributes.addFlashAttribute("message", "User updated successfully.");
+            redirectAttributes.addFlashAttribute("message", "User role updated to " + role + " successfully.");
         } else {
-            // Adding a new admin/editor
+            // Adding a new admin/editor or downgrading an existing user
             if (existing.isPresent()) {
-                // Promote existing user (USER) to ADMIN/EDITOR
+                // Promote/downgrade existing user
                 AppUser user = existing.get();
                 user.setRole(role);
                 userRepository.save(user);
-                redirectAttributes.addFlashAttribute("message", "User promoted to " + role + " successfully.");
+                redirectAttributes.addFlashAttribute("message", "User role updated to " + role + " successfully.");
             } else {
                 AppUser newAdmin = new AppUser();
                 newAdmin.setEmail(email);
