@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 
 <head>
     <meta charset="UTF-8">
@@ -55,7 +55,15 @@
                         <h2>Event List</h2>
                         <p th:text="'Total events found: ' + ${#lists.size(events)}"></p>
                     </div>
+
+                    <a class="primary-btn"
+                        th:href="@{/admin/events/export(month=${selectedMonth}, year=${selectedYear})}">
+                        Download Excel
+                    </a>
                 </div>
+
+                <p class="success-msg" th:if="${message}" th:text="${message}"></p>
+                <p class="error-msg" th:if="${error}" th:text="${error}"></p>
 
                 <div class="table-wrap">
                     <table>
@@ -81,7 +89,24 @@
                                 <td th:text="${event.createdByEmail}"></td>
                                 <td th:text="${#lists.size(event.images)}"></td>
                                 <td>
-                                    <a class="secondary-btn" th:href="@{/admin/events/{id}(id=${event.id})}">Show</a>
+                                    <div class="actions">
+                                        <a class="secondary-btn"
+                                            th:href="@{/admin/events/{id}(id=${event.id})}">Show</a>
+
+                                        <form sec:authorize="hasRole('ADMIN')"
+                                            th:action="@{/admin/events/{id}/delete(id=${event.id})}" method="post"
+                                            style="margin: 0;"
+                                            onsubmit="return confirm('Delete this event permanently? Its uploaded images will also be removed.');">
+                                            <input type="hidden" th:name="month" th:value="${selectedMonth}"
+                                                th:if="${selectedMonth != null}">
+                                            <input type="hidden" th:name="year" th:value="${selectedYear}"
+                                                th:if="${selectedYear != null}">
+                                            <input type="hidden" th:name="${_csrf.parameterName}"
+                                                th:value="${_csrf.token}">
+
+                                            <button type="submit" class="danger-btn">Delete</button>
+                                        </form>
+                                    </div>
                                 </td>
                             </tr>
                             <tr th:if="${#lists.isEmpty(events)}">

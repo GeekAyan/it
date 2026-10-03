@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 
 <head>
     <meta charset="UTF-8">
@@ -21,6 +21,15 @@
                     </div>
                     <div class="actions">
                         <a class="secondary-btn" th:href="@{/admin/events}">Back to Events</a>
+
+                        <form sec:authorize="hasRole('ADMIN')"
+                            th:action="@{/admin/events/{id}/delete(id=${event.id})}" method="post"
+                            style="margin: 0;"
+                            onsubmit="return confirm('Delete this event permanently? Its uploaded images will also be removed.');">
+                            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+
+                            <button type="submit" class="danger-btn">Delete Event</button>
+                        </form>
                     </div>
                 </div>
 
