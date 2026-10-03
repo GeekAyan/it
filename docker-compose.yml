@@ -1,0 +1,82 @@
+# =====================================================================
+#  AIIMS Kalyani - IT Event Portal
+#  Stack: Apache (host) -> this compose stack -> MySQL
+#
+#  Copy .env.example to .env and fill it in before running anything.
+#  NEVER type `docker compose down -v` : the -v flag destroys the database.
+# =====================================================================
+name: aiims
+
+services:
+  db:
+    image: mysql:8.0.46          # exact match for the source database
+    container_name: aiims-db
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD missing from .env}
+      MYSQL_DATABASE: eventdb
+      MYSQL_USER: aiims
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD missing from .env}
+    volumes:
+      - db_data:/var/lib/mysql
+    # No `ports:` on purpose -> MySQL is unreachable from outside this
+    # compose network. Only the app container can talk to it.
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: aiims-app:${APP_TAG:-1.0.0}
+    container_name: aiims-app
+    restart: unless-stopped
+    stop_grace_period: 30s
+    depends_on:
+      db:
+        condition: service_healthy    # JPA needs the DB at startup
+    environment:
+      # Host is the *service name*, not localhost  -> see note in deploy/README.md
+      DB_URL: jdbc:mysql://db:3306/eventdb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DB_USERNAME: aiims
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD missing from .env}
+      MAIL_USERNAME: ${MAIL_USERNAME:?MAIL_USERNAME missing from .env}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:?MAIL_PASSWORD missing from .env}
+      # Production overrides - env vars outrank classpath config, so none of
+      # these need an image rebuild to change.
+      SPRING_JPA_SHOW_SQL: "false"
+      SPRING_JPA_OPEN_IN_VIEW: "false"
+      SPRING_THYMELEAF_CACHE: "true"
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+      LOGGING_LEVEL_ROOT: INFO
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: INFO
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_MAIL: INFO
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: INFO
+      JAVA_OPTS: ${JAVA_OPTS:--Xms256m -Xmx768m}
+    volumes:
+      # Bind mount, NOT a named volume: the uploaded images stay visible and
+      # backup-able on the host filesystem and survive rebuilds.
+      - ./uploads:/app/uploads
+    ports:
+      # Bound to loopback only -> Apache on the host is the single entry point.
+      # Do NOT add server.address=127.0.0.1 to the app config; that would break
+      # this mapping, because the app must listen on 0.0.0.0 *inside* the netns.
+      - "127.0.0.1:8080:8080"
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  db_data:
+    # Pinned name: stays findable even if this directory is moved or renamed.
+    name: aiims_db_data

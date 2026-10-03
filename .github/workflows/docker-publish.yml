@@ -1,0 +1,101 @@
+name: Build app image
+
+# Push to main  -> builds and publishes to GitHub Container Registry (ghcr.io)
+# Pull request  -> builds only, to prove the Dockerfile and code still compile
+# Manual        -> same as push to main
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+# A newer commit makes an in-flight run pointless, so cancel it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      # ghcr.io requires an all-lowercase image path, but github.repository keeps
+      # the repository's original casing ("GeekAyan/it"). Normalise it, otherwise
+      # the push fails with "invalid reference format".
+      - name: Normalise image name
+        run: echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      # Publish the immutable commit SHA always, and :latest only off main.
+      - name: Compute image tags
+        run: |
+          IMAGE="${REGISTRY}/${IMAGE_NAME}"
+          {
+            echo "TAGS<<GITHUB_EOF"
+            echo "${IMAGE}:${GITHUB_SHA}"
+            if [ "${GITHUB_EVENT_NAME}" != "pull_request" ]; then
+              echo "${IMAGE}:latest"
+            fi
+            echo "GITHUB_EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Only needed when the image is actually published; pull requests from
+      # forks do not get a write token, so logging in there would break them.
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ env.TAGS }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # A pull request that builds here means the code compiles and the
+      # Dockerfile is valid, so it is safe to merge.
+      - name: Summarise pull request build
+        if: github.event_name == 'pull_request'
+        run: echo "Build validated. Merge to publish the image to $REGISTRY."
+
+      - name: Summarise
+        if: github.event_name != 'pull_request'
+        run: |
+          IMAGE="${REGISTRY}/${IMAGE_NAME}"
+          {
+            echo "### Image published"
+            echo ""
+            echo '```'
+            echo "${IMAGE}:latest"
+            echo "${IMAGE}:${GITHUB_SHA}"
+            echo '```'
+            echo ""
+            echo "Deploy on the server:"
+            echo '```bash'
+            echo "cd /opt/aiims"
+            echo "docker compose pull app"
+            echo "docker compose up -d app"
+            echo '```'
+            echo ""
+            echo "The server must be switched from build-on-server to pull-image mode"
+            echo "once - see deploy/README.md, 'Using a prebuilt image from ghcr.io'."
+          } >> "$GITHUB_STEP_SUMMARY"

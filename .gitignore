@@ -38,3 +38,13 @@ build/
 /src/main/resources/application-local.properties
 .env
 *.env
+
+### Deployment / runtime artifacts ###
+# Local Docker secrets (.env, backups/ and crash dumps)
+.env
+backups/
+deploy/*.bak
+
+### JVM crash dumps ###
+hs_err_pid*.log
+replay_pid*.log
