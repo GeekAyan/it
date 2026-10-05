@@ -11,7 +11,8 @@ set -euo pipefail
 
 APP_DIR=/opt/aiims
 SERVICE=aiims-app.service
-HEALTH_URL=http://127.0.0.1:8080/login
+# Must match deploy.sh - the app serves under the /event context path.
+HEALTH_URL=http://127.0.0.1:8080/event/login
 
 log() { printf '\n\033[1;34m==> %s\033[0m\n' "$1"; }
 die() { printf '\033[1;31mERROR: %s\033[0m\n' "$1" >&2; exit 1; }

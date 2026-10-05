@@ -20,7 +20,10 @@ APP_DIR=/opt/aiims
 MYSQL_CNF=/etc/mysql/aiims.cnf
 ENV_FILE="$APP_DIR/aiims.env"
 SERVICE=aiims-app.service
-HEALTH_URL=http://127.0.0.1:8080/login
+# The app runs under the /event context path, so the health endpoint is
+# /event/login, not /login. Getting this wrong makes every deploy fail its
+# health check and trigger a pointless rollback.
+HEALTH_URL=http://127.0.0.1:8080/event/login
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$APP_DIR/backups" "$APP_DIR/logs"

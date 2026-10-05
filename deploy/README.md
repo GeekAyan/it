@@ -21,6 +21,18 @@ Apache (host, already present) ──mod_proxy──►  Spring Boot JVM
                                             aiims-mysql.service
                                             MySQL 8.4, datadir /opt/aiims/mysql/data
 ```
+**The app is mounted at `/event`, not `/`.** This Apache already serves
+`/network_monitor`, `/mrtg`, `/gestioip` and `/switch-live` on port 80, so the
+app takes only the `/event` prefix and runs with
+`server.servlet.context-path=/event`.
+
+| URL | Serves |
+|---|---|
+| `http://172.16.98.235/event/` | this application |
+| `http://172.16.98.235/network_monitor` | pre-existing monitoring app |
+| `http://172.16.98.235/mrtg` | pre-existing MRTG graphs |
+| `http://172.16.98.235/gestioip` | pre-existing GestioIP |
+| `http://172.16.98.235/switch-live` | pre-existing LAN monitor |
 
 ### Why a second MySQL instance
 
@@ -156,22 +168,47 @@ systemctl enable --now aiims-app.service
 journalctl -u aiims-app -f
 ```
 
-### Step 9 — Apache reverse proxy
+### Step 9 — Apache reverse proxy (scoped to /event)
+
+The app must **not** claim the whole virtual host: this Apache already serves
+`/network_monitor`, `/mrtg`, `/gestioip` and `/switch-live` on port 80. Adding a
+`<VirtualHost>` with a `ServerAlias` for the server's IP claims *every* request
+and breaks all of them.
+
+Instead, insert the `/event` block **inside the existing default vhost**:
+
 ```bash
-sed -i 's/^    ServerName.*/    ServerName YOUR-HOSTNAME/' \
-    /opt/aiims/deploy/aiims.apache.conf
-cp /opt/aiims/deploy/aiims.apache.conf /etc/apache2/sites-available/aiims.conf
 a2enmod proxy proxy_http headers
-a2ensite aiims.conf
-apachectl configtest && systemctl reload apache2
+
+# back up the existing vhost first
+sudo cp -a /etc/apache2/sites-available/000-default.conf \
+            /etc/apache2/sites-available/000-default.conf.bak-$(date +%Y%m%d-%H%M%S)
+
+# insert the snippet just before the closing </VirtualHost>
+sudo awk '/<\/VirtualHost>/ && !d {
+            while ((getline l < "/opt/aiims/deploy/event-proxy.conf") > 0) print l
+            d=1
+        } { print }' \
+    /etc/apache2/sites-available/000-default.conf > /tmp/dd.conf
+sudo install -m 644 /tmp/dd.conf /etc/apache2/sites-available/000-default.conf
+
+sudo apachectl configtest && sudo systemctl reload apache2
 ```
-`a2enmod proxy` only enables a module that is already part of the installed
-`apache2` package — no package installation is involved.
+
+`a2enmod proxy` only enables a module already part of the installed `apache2`
+package — no package installation is involved.
 
 ### Step 10 — Verify
 ```bash
-curl -I http://127.0.0.1:8080/login    # app directly  -> 200
-curl -I http://127.0.0.1/login         # via Apache   -> 200
+curl -I http://127.0.0.1:8080/event/login    # app directly -> 200
+curl -I http://127.0.0.1/event/login         # via Apache  -> 200
+
+# the other applications on this host must still work
+for p in / /network_monitor /mrtg /gestioip /switch-live; do
+  printf "%-18s %s\n" "$p" \
+    "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: 172.16.98.235' http://127.0.0.1$p)"
+done
+
 systemctl status aiims-app aiims-mysql
 ss -lnt | grep 3307
 ```
@@ -276,8 +313,14 @@ systemctl start aiims-app
 # 3. then:
 sudo /opt/aiims/deploy/init-db.sh /tmp/eventdb.sql
 systemctl daemon-reload && systemctl enable --now aiims-app
-cp deploy/aiims.apache.conf /etc/apache2/sites-available/aiims.conf
-a2ensite aiims.conf && apachectl configtest && systemctl reload apache2
+# add the /event block to the existing default vhost - see Step 9
+sudo awk '/<\/VirtualHost>/ && !d {
+            while ((getline l < "/opt/aiims/deploy/event-proxy.conf") > 0) print l
+            d=1
+        } { print }' \
+    /etc/apache2/sites-available/000-default.conf > /tmp/dd.conf
+sudo install -m 644 /tmp/dd.conf /etc/apache2/sites-available/000-default.conf
+sudo apachectl configtest && sudo systemctl reload apache2
 ```
 No build toolchain, no container runtime, no package manager needed on the
 destination.
@@ -309,6 +352,14 @@ destination.
 - **`WorkingDirectory=/opt/aiims` is load-bearing.** `file.upload-dir=uploads`
   is a *relative* path that resolves against it. Get this wrong and every
   image 404s.
+- **The app runs under the `/event` context path.** All templates use Thymeleaf
+  `@{/...}` and the success handler uses `request.getContextPath()`, so links
+  stay under `/event` automatically. If you ever mount it somewhere else,
+  change `server.servlet.context-path` **and** the `ProxyPass` in
+  `deploy/event-proxy.conf` together.
+- **Never give this app its own `<VirtualHost>` with a `ServerAlias` for the
+  server's IP.** That claims every request for that host and silently breaks
+  `/network_monitor`, `/mrtg`, `/gestioip` and `/switch-live`.
 - **Sessions are in-memory** — there is no Spring Session, so every restart
   logs all users out. Fine for a single instance; do not run two without
   sticky sessions.

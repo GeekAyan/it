@@ -25,6 +25,21 @@ public class AdminErrorViewResolver {
                 String originalUri = (String) request.getAttribute(
                         RequestDispatcher.ERROR_REQUEST_URI);
 
+                // ERROR_REQUEST_URI is the full URI as sent by the client, so
+                // it INCLUDES the context path (e.g. "/event/admin/users" when
+                // server.servlet.context-path=/event). Strip it so this check
+                // keeps working at the root or under any context path.
+                if (originalUri != null) {
+                    String contextPath = request.getContextPath();
+                    if (contextPath != null && !contextPath.isEmpty()
+                            && originalUri.startsWith(contextPath)) {
+                        originalUri = originalUri.substring(contextPath.length());
+                    }
+                    if (originalUri.isEmpty()) {
+                        originalUri = "/";
+                    }
+                }
+
                 if (originalUri != null && originalUri.startsWith("/admin/")) {
                     ModelAndView view = new ModelAndView("admin-error");
                     view.addAllObjects(model);
