@@ -44,12 +44,15 @@ while IFS= read -r line; do
 done < "$ENV_FILE"
 DB_PASSWORD="${DB_PASSWORD%\"}"; DB_PASSWORD="${DB_PASSWORD#\"}"
 MYSQL="/usr/bin/mysql --defaults-file=$MYSQL_CNF -u root -p$DB_PASSWORD"
+# Backups need mysqldump, NOT the mysql client --single-transaction and
+# --routines/--triggers are mysqldump options and the client rejects them.
+MYSQLDUMP="/usr/bin/mysqldump --defaults-file=$MYSQL_CNF -u root -p$DB_PASSWORD"
 
 # --- 1. back up everything BEFORE changing anything --------------------
 log "Backing up the database"
-$MYSQL --single-transaction --routines --triggers \
-       --default-character-set=utf8mb4 eventdb \
-       > "$APP_DIR/backups/eventdb-${STAMP}.sql"
+$MYSQLDUMP --single-transaction --routines --triggers \
+           --default-character-set=utf8mb4 eventdb \
+           > "$APP_DIR/backups/eventdb-${STAMP}.sql"
 [[ -s "$APP_DIR/backups/eventdb-${STAMP}.sql" ]] || die "Database backup is empty - ABORTING."
 
 if [[ -d "$APP_DIR/uploads" ]]; then

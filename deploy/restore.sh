@@ -38,6 +38,7 @@ while IFS= read -r line; do
 done < "$ENV_FILE"
 DB_PASSWORD="${DB_PASSWORD%\"}"; DB_PASSWORD="${DB_PASSWORD#\"}"
 MYSQL="/usr/bin/mysql --defaults-file=$MYSQL_CNF -u root -p$DB_PASSWORD"
+MYSQLDUMP="/usr/bin/mysqldump --defaults-file=$MYSQL_CNF -u root -p$DB_PASSWORD"
 
 printf '\033[1;31m'
 echo "This REPLACES the contents of the eventdb schema on port 3307."
@@ -47,9 +48,9 @@ read -rp "Type 'yes' to continue: " ANSWER
 [[ "$ANSWER" == "yes" ]] || { echo "Aborted."; exit 1; }
 
 log "Taking a safety dump of the current state"
-$MYSQL --single-transaction --routines --triggers \
-       --default-character-set=utf8mb4 eventdb \
-       > "$APP_DIR/backups/pre-restore-$(date +%Y%m%d-%H%M%S).sql"
+$MYSQLDUMP --single-transaction --routines --triggers \
+           --default-character-set=utf8mb4 eventdb \
+           > "$APP_DIR/backups/pre-restore-$(date +%Y%m%d-%H%M%S).sql"
 
 log "Restoring from $(basename "$FILE")"
 $MYSQL eventdb < "$FILE"
