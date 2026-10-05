@@ -15,7 +15,9 @@
 set -euo pipefail
 
 APP_DIR=/opt/aiims
-MYSQL_CNF="$APP_DIR/mysql/aiims-mysql.cnf"
+# AppArmor confines mysqld to /etc/mysql, so the instance config lives there
+# (init-db.sh installs it). See deploy/README.md.
+MYSQL_CNF=/etc/mysql/aiims.cnf
 ENV_FILE="$APP_DIR/aiims.env"
 SERVICE=aiims-app.service
 HEALTH_URL=http://127.0.0.1:8080/login
