@@ -113,8 +113,18 @@ if [[ "$ALREADY_RUNNING" -eq 0 ]]; then
 fi
 
 # --- secure root and create the application schema ---------------------
+# On a fresh --initialize-insecure datadir root has an EMPTY password; on every
+# later run it has DB_PASSWORD. Detect which so the script is safely re-runnable.
+if "$MYSQL" --defaults-file="$CNF" -u root -p"$DB_PASSWORD" -e "SELECT 1" >/dev/null 2>&1; then
+  ROOT_AUTH=(-p"$DB_PASSWORD")
+  echo "    authenticating as root with the configured password"
+else
+  ROOT_AUTH=()
+  echo "    authenticating as root with no password (fresh datadir)"
+fi
+
 log "Securing root and creating the eventdb schema"
-"$MYSQL" --defaults-file="$CNF" -u root <<SQL
+"$MYSQL" --defaults-file="$CNF" -u root "${ROOT_AUTH[@]}" <<SQL
 ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
 CREATE DATABASE IF NOT EXISTS eventdb
   CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
