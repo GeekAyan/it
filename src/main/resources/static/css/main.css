@@ -43,7 +43,7 @@ body {
     position: relative;
     background:
         linear-gradient(rgba(0, 70, 110, 0.55), rgba(0, 70, 110, 0.6)),
-        url('/images/aiims-kalyani.jpg') center/cover no-repeat;
+        url('../images/aiims-kalyani.jpg') center/cover no-repeat;
     display: flex;
     align-items: flex-end;
     padding: 48px;
