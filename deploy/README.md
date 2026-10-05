@@ -349,6 +349,50 @@ destination.
   columns and never drops or deletes anything, so deploying new code cannot
   lose rows. It also never *removes* a column, so renaming an entity field
   leaves the old column behind (harmless). Never switch to `create-drop`.
+- **The legacy `event` table is a schema landmine.** `Event.java` maps to
+  `events`, but a leftover `event` table still exists from before a rename.
+  `ddl-auto=update` never drops constraints, so a *stale* foreign key survived
+  on `event_images`:
+
+  ```sql
+  -- WRONG: references the abandoned table
+  CONSTRAINT `FKbf173wtth5u1u7ttu9jeignci` FOREIGN KEY (`event_id`) REFERENCES `event`(`id`)
+  ```
+
+  With both constraints present MySQL enforces **both**. Inserts only worked
+  while new event ids happened to coincide with rows in the legacy table
+  (ids 1-9). Once `events` passed id 9, every save with an image failed:
+
+  ```
+  Cannot add or update a child row: a foreign key constraint fails
+  (`eventdb`.`event_images`, CONSTRAINT `FKbf173wtth5u1u7ttu9jeignci`
+  FOREIGN KEY (`event_id`) REFERENCES `event` (`id`))
+  ```
+
+  **Fix** (applied to the server and the local dev database on 2026-10-05,
+  after confirming no row depended on the legacy table):
+
+  ```sql
+  ALTER TABLE eventdb.event_images DROP FOREIGN KEY FKbf173wtth5u1u7ttu9jeignci;
+  ```
+
+  A freshly created database never gets this constraint, so it only reappears
+  when restoring an old dump. If a future restore reintroduces it, drop the
+  constraint pointing at `event` and keep the one pointing at `events`. The
+  legacy `event` table can then be dropped once you are sure its history is not
+  needed.
+
+- **Failed saves leave orphaned image files.** `EventController.saveEvent`
+  copies each upload to `uploads/` *before* `eventRepository.save(event)`, so a
+  failed database write still leaves the file on disk with no matching
+  `event_images` row. To find them:
+
+  ```bash
+  mysql ... -N -e "SELECT image_path FROM eventdb.event_images" | sort > /tmp/known
+  ls -1 /opt/aiims/uploads | sort > /tmp/ondisk
+  comm -23 /tmp/ondisk /tmp/known      # files with no database row
+  ```
+
 - **`WorkingDirectory=/opt/aiims` is load-bearing.** `file.upload-dir=uploads`
   is a *relative* path that resolves against it. Get this wrong and every
   image 404s.
