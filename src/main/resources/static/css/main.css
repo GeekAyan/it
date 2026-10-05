@@ -207,6 +207,59 @@ body {
     min-height: 120px;
 }
 
+/* ---------- Input with a fixed, non-editable domain suffix ---------- */
+
+.input-group {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: #fbfdff;
+    overflow: hidden;
+}
+
+.input-group:focus-within {
+    border-color: #0b7fab;
+    box-shadow: 0 0 0 3px rgba(11, 127, 171, 0.15);
+}
+
+/* Beats the .field input rule on specificity so the box joins the suffix. */
+.field .input-group input[type="text"] {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+}
+
+.field .input-group input[type="text"]:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+.input-suffix {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    background: var(--primary-light);
+    border-left: 1px solid var(--soft-border);
+    color: var(--heading);
+    font-size: 15px;
+    font-weight: 600;
+    white-space: nowrap;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.field-hint {
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--secondary-text);
+}
+
 .field input:focus,
 .field select:focus,
 .field textarea:focus {

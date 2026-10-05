@@ -57,6 +57,36 @@ public class AuthController {
         return normalised.substring(at + 1).equals(allowedEmailDomain);
     }
 
+    /**
+     * Builds the full address from the part the user typed before the @.
+     * The domain always comes from configuration, never from user input.
+     *
+     * @return the full address, or null when the input cannot be a valid
+     *         local part (empty, illegal characters, or a foreign domain
+     *         was pasted in).
+     */
+    private String buildEmailFromLocalPart(String emailLocal) {
+        if (emailLocal == null) {
+            return null;
+        }
+        String local = emailLocal.trim().toLowerCase(Locale.ROOT);
+
+        // A full address may have been pasted. Keep only the local part, and
+        // only when the pasted domain is the permitted one.
+        int at = local.indexOf('@');
+        if (at >= 0) {
+            if (!local.substring(at + 1).equals(allowedEmailDomain)) {
+                return null;
+            }
+            local = local.substring(0, at);
+        }
+
+        if (local.isEmpty() || !local.matches("[a-z0-9._%+-]+")) {
+            return null;
+        }
+        return local + "@" + allowedEmailDomain;
+    }
+
     @GetMapping("/login")
     public String login(Model model) {
         System.out.println("GET /login called");
@@ -65,14 +95,29 @@ public class AuthController {
     }
 
     @PostMapping("/request-otp")
-    public String requestOtp(@RequestParam String email,
+    public String requestOtp(
+            @RequestParam(value = "emailLocal", required = false) String emailLocal,
+            @RequestParam(value = "email", required = false) String legacyEmail,
             HttpSession session,
             Model model) {
 
-        System.out.println("POST /request-otp called with email = " + email);
+        System.out.println("POST /request-otp called with emailLocal = " + emailLocal);
 
-        // Reject anything outside the permitted domain BEFORE creating a user
-        // or sending mail, so no OTP is ever issued to an outside address.
+        // The login form lets the user type only the part before the @; the
+        // domain is appended here so it can never be overridden by the client.
+        String email = (emailLocal != null && !emailLocal.isBlank())
+                ? buildEmailFromLocalPart(emailLocal)
+                : (legacyEmail != null ? legacyEmail.trim().toLowerCase(Locale.ROOT) : null);
+
+        if (email == null) {
+            System.out.println("Rejected unusable email local part: " + emailLocal);
+            model.addAttribute("error",
+                    "Enter the part of your email address before the @ symbol.");
+            model.addAttribute("allowedDomain", allowedEmailDomain);
+            return "login";
+        }
+
+        // Belt and braces: the composed address must still be in the allowed domain.
         if (!isAllowedEmail(email)) {
             System.out.println("Rejected email outside allowed domain: " + email);
             model.addAttribute("error",
@@ -80,8 +125,6 @@ public class AuthController {
             model.addAttribute("allowedDomain", allowedEmailDomain);
             return "login";
         }
-
-        email = email.trim();
 
         try {
             Optional<AppUser> optionalUser = userRepository.findByEmail(email);

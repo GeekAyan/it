@@ -36,10 +36,19 @@
                 <form th:action="@{/request-otp}" method="post">
                     <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                     <div class="field">
-                        <label>Email address</label>
-                        <input type="email" name="email" required
-                               th:placeholder="'you@' + ${allowedDomain}"
-                               autocomplete="email">
+                        <label for="emailLocal">Email address</label>
+                        <div class="input-group">
+                            <input type="text" id="emailLocal" name="emailLocal"
+                                   required autocomplete="off" autocapitalize="none"
+                                   autocorrect="off" spellcheck="false"
+                                   placeholder="itadmin"
+                                   aria-describedby="emailHint">
+                            <span class="input-suffix"
+                                  th:text="'@' + ${allowedDomain}">@aiimskalyani.edu.in</span>
+                        </div>
+                        <small class="field-hint" id="emailHint">
+                            Type only the part before the @ symbol.
+                        </small>
                     </div>
 
                     <button type="submit" class="btn">Send OTP</button>
@@ -47,6 +56,43 @@
             </div>
         </div>
     </div>
+
+    <script th:inline="javascript">
+        /* The domain part is fixed by the server; users type only the part
+           before the @. These helpers make that forgiving. */
+        (function () {
+            var input = document.getElementById('emailLocal');
+            var suffixEl = document.querySelector('.input-suffix');
+            var domain = suffixEl ? suffixEl.textContent.trim().replace(/^@/, '') : '';
+
+            if (!input) { return; }
+
+            // Strip the domain if the user pastes a full address,
+            // but only when it matches the permitted domain.
+            function normalise(value) {
+                var v = value.trim();
+                var at = v.indexOf('@');
+                if (at < 0) { return v; }
+                if (v.slice(at + 1).toLowerCase() === domain.toLowerCase()) {
+                    return v.slice(0, at);
+                }
+                // A different domain was pasted - show it so it is not silently hidden.
+                return v;
+            }
+
+            input.addEventListener('blur', function () {
+                input.value = normalise(input.value);
+            });
+
+            input.addEventListener('input', function () {
+                var at = input.value.indexOf('@');
+                if (at >= 0) {
+                    input.value = input.value.slice(0, at);
+                }
+                input.value = input.value.replace(/\s+/g, '');
+            });
+        })();
+    </script>
 </body>
 
 </html>
