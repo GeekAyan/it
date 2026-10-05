@@ -45,12 +45,12 @@ build/
 backups/
 deploy/*.bak
 
-# Runtime directories created by the deployment (never in git)
+# Runtime tree created on the SERVER only (never in this repo).
+# The repo carries deploy/aiims.env.example and deploy/application-prod.properties
+# as templates, which must stay tracked.
 logs/
 mysql/
 app.jar
-aiims.env
-application-prod.properties
 
 ### JVM crash dumps ###
 hs_err_pid*.log
