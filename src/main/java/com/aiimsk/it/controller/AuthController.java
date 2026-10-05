@@ -6,6 +6,7 @@ import com.aiimsk.it.service.EmailService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.security.SecureRandom;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 @Controller
@@ -27,14 +29,38 @@ public class AuthController {
     private final EmailService emailService;
     private final SecureRandom secureRandom = new SecureRandom();
 
-    public AuthController(UserRepository userRepository, EmailService emailService) {
+    /** Only addresses in this domain may sign in. */
+    private final String allowedEmailDomain;
+
+    public AuthController(UserRepository userRepository,
+                          EmailService emailService,
+                          @Value("${app.allowed-email-domain}") String allowedEmailDomain) {
         this.userRepository = userRepository;
         this.emailService = emailService;
+        this.allowedEmailDomain = allowedEmailDomain.trim().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Returns true only for addresses in the allowed domain. Comparison is
+     * case-insensitive and ignores surrounding whitespace, so "USER@AIIMSKALYANI.EDU.IN "
+     * is accepted while "user@gmail.com" is not.
+     */
+    private boolean isAllowedEmail(String email) {
+        if (email == null) {
+            return false;
+        }
+        String normalised = email.trim().toLowerCase(Locale.ROOT);
+        int at = normalised.lastIndexOf('@');
+        if (at < 0 || at == normalised.length() - 1) {
+            return false;
+        }
+        return normalised.substring(at + 1).equals(allowedEmailDomain);
     }
 
     @GetMapping("/login")
-    public String login() {
+    public String login(Model model) {
         System.out.println("GET /login called");
+        model.addAttribute("allowedDomain", allowedEmailDomain);
         return "login";
     }
 
@@ -44,6 +70,18 @@ public class AuthController {
             Model model) {
 
         System.out.println("POST /request-otp called with email = " + email);
+
+        // Reject anything outside the permitted domain BEFORE creating a user
+        // or sending mail, so no OTP is ever issued to an outside address.
+        if (!isAllowedEmail(email)) {
+            System.out.println("Rejected email outside allowed domain: " + email);
+            model.addAttribute("error",
+                    "Only @" + allowedEmailDomain + " email addresses can sign in.");
+            model.addAttribute("allowedDomain", allowedEmailDomain);
+            return "login";
+        }
+
+        email = email.trim();
 
         try {
             Optional<AppUser> optionalUser = userRepository.findByEmail(email);
@@ -78,6 +116,7 @@ public class AuthController {
             System.out.println("ERROR in requestOtp for email = " + email);
             ex.printStackTrace();
             model.addAttribute("error", "Failed to send OTP email.");
+            model.addAttribute("allowedDomain", allowedEmailDomain);
             return "login";
         }
     }
@@ -94,9 +133,20 @@ public class AuthController {
             @RequestParam String otp,
             HttpSession session,
             HttpServletRequest request,
-            HttpServletResponse response) {
+            HttpServletResponse response,
+            Model model) {
 
         System.out.println("POST /verify-otp called with email = " + email + ", otp = " + otp);
+
+        // Defence in depth: a session created before this rule existed must
+        // not still be able to complete sign-in with a now-disallowed address.
+        if (!isAllowedEmail(email)) {
+            System.out.println("Rejected verify-otp for outside domain: " + email);
+            model.addAttribute("error",
+                    "Only @" + allowedEmailDomain + " email addresses can sign in.");
+            model.addAttribute("allowedDomain", allowedEmailDomain);
+            return "login";
+        }
 
         String sessionOtp = (String) session.getAttribute("OTP_" + email);
         System.out.println("Session OTP = " + sessionOtp);
