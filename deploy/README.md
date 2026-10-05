@@ -1,6 +1,7 @@
 # Deployment Runbook — AIIMS Kalyani IT Event Portal
 
-Docker Compose deployment. Apache stays on the host as a reverse proxy.
+Native systemd deployment. **No Docker, no container runtime, and no package
+manager on the server.** Apache on the host reverse-proxies to a plain JVM.
 
 ---
 
@@ -10,173 +11,161 @@ Docker Compose deployment. Apache stays on the host as a reverse proxy.
 Internet
    │  :80 / :443
    ▼
-Apache (host) ──mod_proxy──►  aiims-app container ──JDBC──►  aiims-db container
-   │                           127.0.0.1:8080                 MySQL 8.0.46
-   │                           /app/uploads (bind mount)
-   └── TLS, vhost, access logs
+Apache (host, already present) ──mod_proxy──►  Spring Boot JVM
+   │   2.4.66                                   aiims-app.service
+   │   :8080 (127.0.0.1 only)                   /opt/java  (Temurin JRE 25)
+   `--------------------------------------------------------------------------+
+                                                      │
+                                                      │ JDBC 127.0.0.1:3307
+                                                      ▼
+                                            aiims-mysql.service
+                                            MySQL 8.4, datadir /opt/aiims/mysql/data
 ```
 
-**Where the data lives — this is the key thing to understand:**
+### Why a second MySQL instance
 
-| Data | Lives in | Survives rebuild? | Survives `down`? |
-|---|---|---|---|
-| MySQL (events, users, images rows) | named volume `aiims_db_data` | ✅ | ✅ |
-| Uploaded images (106 MB) | bind mount `./uploads` on the host | ✅ | ✅ |
-| Application code | image `aiims-app:<tag>` | ❌ rebuilt each deploy | ✅ |
+The host already runs a **production MySQL 8.4.11 on port 3306** that serves
+other applications. This deployment creates a completely separate instance on
+**port 3307**, reusing the same `mysqld` binary but with its own datadir,
+socket, PID file and systemd service. The 3306 instance is never referenced,
+stopped or modified.
 
-The application code lives **inside an image**, which is disposable. The database
-lives **outside the image**, in a volume the app container has no control over.
-So rebuilding and restarting the app can never delete data.
+| | Production instance | This app's instance |
+|---|---|---|
+| Port | 3306 | **3307** |
+| Datadir | `/var/lib/mysql` | `/opt/aiims/mysql/data` |
+| Service | `mysql.service` | `aiims-mysql.service` |
+| Remove it | never | `systemctl disable --now aiims-mysql` |
 
-### ⚠️ Commands that DO destroy data
+### Where the data lives
 
-| Command | Result |
-|---|---|
-| `docker compose down -v` | 🔴 **Deletes the database volume. All data gone.** |
-| `docker volume rm aiims_db_data` | 🔴 Gone permanently |
-| `docker system prune -a --volumes` | 🔴 Dangerous while `db` is stopped |
-| `rm -rf` the project dir, recreate under a new name | 🟠 Volume orphaned (mitigated: volume name is pinned) |
+| Data | Location | Survives a deploy? |
+|---|---|---|
+| Events, users, image rows | `/opt/aiims/mysql/data` (port 3307) | ✅ |
+| Uploaded images | `/opt/aiims/uploads` | ✅ |
+| Application jar | `/opt/aiims/app.jar` | ❌ replaced each deploy |
 
-Safe: `docker compose down` (no `-v`), `restart`, `up -d --build`, `logs`,
-`ps`, `pull`, `rm <app-container>`.
+A deploy replaces only the jar. **Nothing deletes the data**, and
+`deploy.sh` takes a full backup before touching anything anyway.
 
 ---
 
-## Prerequisites on the server (Ubuntu/Debian)
+## Prerequisites
 
-Disk: **~3 GB free** (MySQL image + app image + data). RAM: **2 GB** minimum
-for build + runtime.
-
-Install Docker (one-time):
-
-```bash
-sudo apt update && sudo apt install -y ca-certificates curl gnupg
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-sudo chmod a+r /etc/apt/keyrings/docker.asc
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
-https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
-  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo systemctl enable --now docker
-sudo usermod -aG docker $USER      # then log out and back in
-docker --version && docker compose version
-```
-
-> Java is **not** installed on the host — Temurin 25 ships inside the image.
+Disk: ~500 MB. RAM: ~700 MB total (JVM 256–768 MB + MySQL ~400 MB).
+Root access via SSH. Java is **not** needed on the host — see Step 2.
 
 ---
 
 ## First-time deployment
 
 ### Step 1 — Get the code onto the server
-
 ```bash
-sudo mkdir -p /opt/aiims
-sudo chown "$USER":"$USER" /opt/aiims
+mkdir -p /opt/aiims
 cd /opt/aiims
 git clone https://github.com/GeekAyan/it.git .
-chmod +x deploy/*.sh          # git may not preserve the executable bit
+chmod +x deploy/*.sh
 ```
 
-### Step 2 — Create the secrets file
-
+### Step 2 — Install the Java runtime (no apt)
 ```bash
-cp .env.example .env
-nano .env                    # fill MYSQL_ROOT_PASSWORD, DB_PASSWORD, MAIL_*, APP_TAG
-chmod 600 .env
+mkdir -p /opt/java
+curl -fsSL -o /tmp/jre.tar.gz \
+  'https://api.adoptium.net/v3/binary/latest/25/ga/linux/x64/jre/hotspot/normal/eclipse'
+tar -xzf /tmp/jre.tar.gz -C /opt/java --strip-components=1
+/opt/java/bin/java -version
 ```
 
-`MAIL_PASSWORD` must be a **Google App Password**, not the account password.
-
-### Step 3 — Place the uploads folder
-
-`uploads/` is git-ignored, so `git clone` does **not** bring it. Copy it across
-from the Windows machine, then fix ownership — the container runs as uid 10001
-and must be able to write new files.
-
+### Step 3 — Create the service account and directories
 ```bash
-# on Windows
-scp -r 'c:\Users\ADMIN\Documents\Work\AIIMS\VS Code workspace\it\uploads' USER@SERVER:/opt/aiims/uploads
+useradd -r -m -d /opt/aiims -s /usr/sbin/nologin aiims 2>/dev/null || true
+mkdir -p /opt/aiims/{uploads,logs,backups,mysql}
+chown -R aiims:aiims /opt/aiims
+```
 
-# on the server
+### Step 4 — Configure
+```bash
 cd /opt/aiims
-sudo chown -R 10001:10001 uploads
+cp deploy/aiims-mysql.cnf          mysql/aiims-mysql.cnf
+cp deploy/aiims.env.example        aiims.env && chmod 600 aiims.env
+cp deploy/application-prod.properties application-prod.properties
+cp deploy/aiims-mysql.service      /etc/systemd/system/
+cp deploy/aiims-app.service        /etc/systemd/system/
+nano aiims.env          # set DB_PASSWORD, MAIL_USERNAME, MAIL_PASSWORD
 ```
+Generate a strong `DB_PASSWORD` — MySQL 8.4's `validate_password` rejects weak
+ones. The same password is used for the app and the database, so they cannot
+drift apart.
 
-### Step 4 — Start MySQL and import the existing data
-
-Export from Windows first (use `--result-file`, **not** `>`, which PowerShell 5.1
-writes as UTF-16 and corrupts the dump):
-
+### Step 5 — Build the jar (on your Windows machine)
+Build from a **clean clone** so `application-local.properties` (which holds
+plaintext credentials) is not baked into the jar:
 ```powershell
-& 'C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe' -u root -p `
-  --single-transaction --routines --triggers --set-gtid-purged=OFF `
-  --default-character-set=utf8mb4 --result-file="$env:TEMP\eventdb.sql" eventdb
-scp "$env:TEMP\eventdb.sql" USER@SERVER:/opt/aiims/backups/
+git clone https://github.com/GeekAyan/it.git C:\temp\aiims-build
+cd C:\temp\aiims-build
+.\mvnw.cmd -DskipTests package
+```
+`-DskipTests` is mandatory: `ItApplicationTests` is a `@SpringBootTest` that
+boots the whole Spring context and needs a live database.
+
+### Step 6 — Transfer everything
+```powershell
+scp C:\temp\aiims-build\target\it-0.0.1-SNAPSHOT.jar `
+    root@172.16.98.235:/tmp/
+scp C:\temp\transfer\eventdb.sql C:\temp\transfer\uploads.tar.gz `
+    root@172.16.98.235:/tmp/
+```
+```bash
+tar -xzf /tmp/uploads.tar.gz -C /opt/aiims     # yields /opt/aiims/uploads
+chown -R aiims:aiims /opt/aiims/uploads
+install -m 640 -o aiims -g aiims /tmp/it-0.0.1-SNAPSHOT.jar /opt/aiims/app.jar
 ```
 
-Then, on the server:
+### Step 7 — Initialise the database
+```bash
+sudo /opt/aiims/deploy/init-db.sh /tmp/eventdb.sql
+```
+This initialises a fresh datadir, starts `aiims-mysql.service`, sets the root
+password, creates `eventdb` plus the `aiims` user, and imports the dump. It
+refuses to run twice.
+
+### Step 8 — Start the application
+```bash
+systemctl daemon-reload
+systemctl enable --now aiims-app.service
+journalctl -u aiims-app -f
+```
+
+### Step 9 — Apache reverse proxy
+```bash
+sed -i 's/^    ServerName.*/    ServerName YOUR-HOSTNAME/' \
+    /opt/aiims/deploy/aiims.apache.conf
+cp /opt/aiims/deploy/aiims.apache.conf /etc/apache2/sites-available/aiims.conf
+a2enmod proxy proxy_http headers
+a2ensite aiims.conf
+apachectl configtest && systemctl reload apache2
+```
+`a2enmod proxy` only enables a module that is already part of the installed
+`apache2` package — no package installation is involved.
+
+### Step 10 — Verify
+```bash
+curl -I http://127.0.0.1:8080/login    # app directly  -> 200
+curl -I http://127.0.0.1/login         # via Apache   -> 200
+systemctl status aiims-app aiims-mysql
+ss -lnt | grep 3307
+```
+Browser: log in, request an OTP (tests SMTP), submit an event with an image,
+view and download it, run the admin Excel export, try "download all images".
+
+### Step 11 — HTTPS (recommended)
 
 ```bash
-cd /opt/aiims
-mkdir -p backups
-docker compose up -d db
-docker compose exec -T db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" eventdb' < backups/eventdb.sql
-docker compose exec -T db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -e "TRUNCATE eventdb.otp_codes;"'
+certbot --apache -d your-hostname
 ```
 
-Verify the import — these numbers must match the source database
-(11 / 11 / 6 / 1):
-
-```bash
-docker compose exec -T db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -N -e "
-  SELECT \"events\",       COUNT(*) FROM eventdb.events
-  UNION ALL SELECT \"event_images\", COUNT(*) FROM eventdb.event_images
-  UNION ALL SELECT \"users\",        COUNT(*) FROM eventdb.users
-  UNION ALL SELECT \"admin_users\",  COUNT(*) FROM eventdb.admin_users;"'
-```
-
-> The dump includes the legacy `event` table, which is still present in the
-> schema even though no entity maps to it any more. That is intentional.
-
-### Step 5 — Start the app
-
-```bash
-docker compose up -d --build app
-docker compose logs -f --tail=100 app      # wait for "Started ItApplication"
-```
-
-### Step 6 — Apache
-
-```bash
-sudo cp deploy/aiims.apache.conf /etc/apache2/sites-available/aiims.conf
-sudo a2enmod proxy proxy_http headers
-sudo a2ensite aiims.conf
-sudo apachectl configtest && sudo systemctl reload apache2
-```
-
-Edit `ServerName` in the copied file first if your hostname differs.
-
-### Step 7 — Verify
-
-```bash
-curl -I http://127.0.0.1:8080/login     # from the server  -> 200
-curl -I http://127.0.0.1/login          # via Apache       -> 200
-docker compose ps                      # both services "healthy"/"running"
-```
-
-Then in a browser: log in, request an OTP (tests SMTP), submit an event with an
-image, view and download that image, run the admin Excel export, and try
-"download all images".
-
-### Step 8 — HTTPS (recommended)
-
-```bash
-sudo apt install -y certbot python3-certbot-apache
-sudo certbot --apache -d events.example.edu.in
-```
+Certbot rewrites the vhost in place. `server.forward-headers-strategy=framework`
+then makes Spring Security set the `Secure` cookie flag correctly.
 
 ---
 
@@ -184,134 +173,94 @@ sudo certbot --apache -d events.example.edu.in
 
 ### Deploying a code update
 
-Edit on your Windows machine, commit, push — then on the server:
+Build and send the new jar, then run the deploy script:
 
+```powershell
+cd C:\temp\aiims-build
+git pull && .\mvnw.cmd -DskipTests package
+scp target\it-0.0.1-SNAPSHOT.jar root@172.16.98.235:/tmp/
+```
 ```bash
-cd /opt/aiims
-./deploy/deploy.sh
+sudo /opt/aiims/deploy/deploy.sh /tmp/it-0.0.1-SNAPSHOT.jar
 ```
 
-That script backs up the database, backs up `uploads/`, runs `git pull`, rebuilds
-the image and restarts **only the app container**. The database container is
-never restarted and the volume is never touched.
+`deploy.sh` backs up the database, uploads and the current jar, installs the
+new one, restarts the service, then **health-checks it. If the app does not
+become healthy within 60 seconds it automatically rolls back** the jar and
+leaves the database untouched.
 
-> **Never edit code inside a running container.** `docker exec` edits vanish the
-> moment the container is recreated. All changes must go through the repository.
+The database service is never restarted by a deploy.
 
-### Config-only change (passwords, heap size, tags)
-
-```bash
-nano .env
-docker compose up -d app     # recreates the app container, ~5 seconds, no rebuild
-```
-
-### Using a prebuilt image from ghcr.io (optional, recommended)
-
-The GitHub Actions workflow publishes every merge to `main` as
-`ghcr.io/geekayan/it`. Using it removes the need for source code and build RAM
-on the server, and cuts a deploy from minutes to seconds.
-
-> The image name is **all lowercase** (`geekayan`), not `GeekAyan`. Container
-> registries reject uppercase paths.
-
-**One-time setup.**
-
-1. Create a token: GitHub → Settings → Developer settings → Personal access
-   tokens → *Tokens (classic)* → generate with the **`read:packages`** scope.
-2. Log the server in to the registry (skip only if the package is public):
-
-   ```bash
-   echo "<YOUR_TOKEN>" | docker login ghcr.io -u <your-github-username> --password-stdin
-   ```
-
-3. Switch the `app` service in `docker-compose.yml` from build mode to pull
-   mode — comment out the `build:` block and point `image:` at the registry:
-
-   ```yaml
-   app:
-     # build:            <-- comment this whole block out
-     #   context: .
-     #   dockerfile: Dockerfile
-     image: ghcr.io/geekayan/it:latest
-   ```
-
-4. Pull and start:
-
-   ```bash
-   docker compose pull app
-   docker compose up -d app
-   ```
-
-**Deploying afterwards** becomes two commands — no `git pull`, no rebuild:
+### Config-only change (passwords, heap size)
 
 ```bash
-cd /opt/aiims
-docker compose pull app && docker compose up -d app
+nano /opt/aiims/aiims.env     # or application-prod.properties
+systemctl restart aiims-app
 ```
-
-> `deploy.sh` assumes **build** mode (it runs `git pull` + `docker compose
-> build`). In pull mode use the two commands above instead, or adjust
-> `deploy.sh` to drop the build step.
-
-**Pinning a specific release** is the rollback mechanism: replace `:latest`
-with the commit SHA shown in the workflow run summary, then `up -d`.
+No rebuild, ~20 seconds.
 
 ### Rollback
 
 ```bash
-./deploy/rollback.sh <previous-commit-sha>
+sudo /opt/aiims/deploy/rollback.sh                        # previous jar
+sudo /opt/aiims/deploy/rollback.sh app-20261003-120000.jar
 ```
+Swaps the jar and restarts. The database is not involved.
 
 ### Backups
 
-`./deploy/deploy.sh` backs up automatically on every deploy and keeps the last 10.
-To back up manually:
-
+`deploy.sh` backs up automatically before every deploy and keeps the last 10.
+To do it by hand:
 ```bash
 cd /opt/aiims
-docker compose exec -T db sh -c 'mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" \
-  --single-transaction --routines --triggers --default-character-set=utf8mb4 eventdb' \
-  > "backups/eventdb-$(date +%Y%m%d-%H%M%S).sql"
+source <(grep '^DB_PASSWORD=' aiims.env)
+mysqldump --defaults-file=mysql/aiims-mysql.cnf -u root -p"$DB_PASSWORD" \
+  --single-transaction --routines --triggers --default-character-set=utf8mb4 \
+  eventdb > "backups/eventdb-$(date +%Y%m%d-%H%M%S).sql"
 tar -czf "backups/uploads-$(date +%Y%m%d-%H%M%S).tar.gz" uploads
 ```
 
-Copy `backups/` off the server regularly — a backup that only exists on the same
-box is not a backup.
+Copy `backups/` off the server — a backup that only exists on the same machine
+is not a backup.
 
 ### Restore
 
 ```bash
-./deploy/restore.sh                                   # lists available backups
-./deploy/restore.sh backups/eventdb-20261003-120000.sql
+sudo /opt/aiims/deploy/restore.sh                                 # list backups
+sudo /opt/aiims/deploy/restore.sh backups/eventdb-20261003-120000.sql
 ```
+Takes a safety dump of the current state first, then confirms before replacing.
 
 ### Logs
 
 ```bash
-docker compose logs -f --tail=100 app
-docker compose logs -f --tail=100 db
-sudo tail -f /var/log/apache2/aiims-error.log
+journalctl -u aiims-app -f                 # application
+journalctl -u aiims-mysql -f               # database
+tail -f /var/log/apache2/aiims-error.log   # web server
+tail -f /opt/aiims/mysql/error.log         # database error log
 ```
 
-Both services cap their logs at 10 MB × 3 files, so logs cannot fill the disk.
+### Stopping / starting the stack
+
+```bash
+systemctl stop  aiims-app          # app only; database keeps running
+systemctl stop  aiims-app aiims-mysql
+systemctl start aiims-app
+```
 
 ### Moving to a different server
 
 ```bash
-# 1. install Docker on the new host (see Prerequisites)
-# 2. copy these across:
-#      Dockerfile  .dockerignore  docker-compose.yml  .env  pom.xml  src/  uploads/
+# 1. create the aiims user, /opt/aiims tree and /opt/java (Steps 2-3)
+# 2. copy across: aiims.env, application-prod.properties, app.jar, uploads/
 # 3. then:
-cd /opt/aiims
-mkdir -p backups && docker compose up -d db
-docker compose exec -T db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" eventdb' < backups/eventdb-<ts>.sql
-docker compose up -d --build app
-sudo cp deploy/aiims.apache.conf /etc/apache2/sites-available/aiims.conf
-sudo a2ensite aiims.conf && sudo apachectl configtest && sudo systemctl reload apache2
+sudo /opt/aiims/deploy/init-db.sh /tmp/eventdb.sql
+systemctl daemon-reload && systemctl enable --now aiims-app
+cp deploy/aiims.apache.conf /etc/apache2/sites-available/aiims.conf
+a2ensite aiims.conf && apachectl configtest && systemctl reload apache2
 ```
-
-With the GitHub Actions workflow enabled, the server needs **no source code** at
-all — just the image from `ghcr.io`.
+No build toolchain, no container runtime, no package manager needed on the
+destination.
 
 ---
 
@@ -319,32 +268,38 @@ all — just the image from `ghcr.io`.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Images load as broken icons | `uploads/` ownership wrong | `sudo chown -R 10001:10001 uploads` |
-| `403` on every page after Apache setup | App not running | `docker compose ps`, `docker compose logs app` |
-| App restarts in a loop, "Communications link failure" | App started before MySQL was ready | Already handled by `depends_on: service_healthy`; check `docker compose logs db` |
-| Large image upload hangs then fails | Apache `ProxyTimeout` too low | It is set to 300s in the vhost; confirm with `apachectl configtest` |
-| `Access denied for user 'aiims'` | Credentials mismatch | Check `DB_PASSWORD` in `.env` matches the `aiims` user in MySQL |
-| OTPs never arrive | Wrong mail credentials | `MAIL_PASSWORD` must be a Google **App Password** |
-| Build fails on `Tests run: ...` | Missing `-DskipTests` | Already set in the Dockerfile |
-| `no space left on device` | Disk full | `docker system df`, then prune images: `docker image prune -a` |
+| Images show as broken | `uploads/` ownership | `chown -R aiims:aiims /opt/aiims/uploads` |
+| App restarts in a loop | Cannot reach MySQL on 3307 | `systemctl status aiims-mysql`, check `/opt/aiims/mysql/error.log` |
+| `Communications link failure` | `allowPublicKeyRetrieval` missing from `DB_URL` | check `aiims.env` |
+| `Access denied for user 'aiims'` | password mismatch | `DB_PASSWORD` in `aiims.env` must match the MySQL user |
+| OTP emails never arrive | wrong SMTP credentials | `MAIL_PASSWORD` must be a Google **App Password** |
+| Every page 503 through Apache | app not listening | `ss -lnt \| grep 8080`, `journalctl -u aiims-app` |
+| Large upload times out | Apache `ProxyTimeout` too low | set to 300 in the vhost; re-run `apachectl configtest` |
+| `unit not found` | units not installed | `cp deploy/*.service /etc/systemd/system/ && systemctl daemon-reload` |
+| `mysqld` refuses to start | datadir perms | `chown -R aiims:aiims /opt/aiims/mysql` |
 
 ---
 
 ## Notes specific to this application
 
-- **`ddl-auto=update` is additive only.** Hibernate adds missing tables/columns
-  and never drops or deletes anything, so deploying new code cannot lose rows.
-  It also never *removes* a column, so renaming an entity field leaves the old
-  column behind (harmless; clean up manually if you care). Never switch to
-  `create-drop` — that wipes the database on every boot.
-- **Sessions are in-memory.** There is no Spring Session, so every restart logs
-  all users out. Do not add a second app container without sticky sessions.
-- **Production logging is overridden via environment variables** in
-  `docker-compose.yml` (`show-sql=false`, Thymeleaf cache on, DEBUG logging off).
-  Change these in the compose file — no rebuild needed.
-- **The `uploads` path is relative** (`file.upload-dir=uploads`) and resolves
-  against the container's working directory, which is why `/app` is set as
-  `WORKDIR` and `/app/uploads` is bind-mounted.
+- **`ddl-auto=update` is additive only.** Hibernate adds missing tables and
+  columns and never drops or deletes anything, so deploying new code cannot
+  lose rows. It also never *removes* a column, so renaming an entity field
+  leaves the old column behind (harmless). Never switch to `create-drop`.
+- **`WorkingDirectory=/opt/aiims` is load-bearing.** `file.upload-dir=uploads`
+  is a *relative* path that resolves against it. Get this wrong and every
+  image 404s.
+- **Sessions are in-memory** — there is no Spring Session, so every restart
+  logs all users out. Fine for a single instance; do not run two without
+  sticky sessions.
+- **Secrets never enter the jar.** `application-local.properties` is git-ignored,
+  so building from a clean clone keeps the DB and Gmail passwords out of the
+  artifact. They are supplied by `/opt/aiims/aiims.env` at runtime.
+- **Rotate the DB and Gmail passwords.** Both were previously stored in
+  plaintext in the working copy of the repository.
 - **`EventController` hardcodes `MediaType.IMAGE_JPEG`** while PNG files exist
   in `uploads/`. Pre-existing bug, unrelated to deployment; browsers usually
-  cope, but it should be fixed by detecting the real content type.
+  cope with it.
+- **Docker is installed on the host but unused.** It can be removed with
+  `apt purge docker-ce docker-ce-cli containerd.io` if you want the host clean;
+  nothing in this deployment depends on it.

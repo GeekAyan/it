@@ -1,0 +1,39 @@
+[Unit]
+Description=AIIMS Kalyani - IT Event Portal (Spring Boot)
+Documentation=https://github.com/GeekAyan/it
+After=network-online.target aiims-mysql.service
+Wants=network-online.target
+Requires=aiims-mysql.service
+
+[Service]
+Type=simple
+User=aiims
+Group=aiims
+
+# LOAD-BEARING: file.upload-dir=uploads is a RELATIVE path, so it resolves
+# against this directory. Get this wrong and every image 404s.
+WorkingDirectory=/opt/aiims
+
+# DB / SMTP credentials. Kept out of the jar and out of git.
+EnvironmentFile=/opt/aiims/aiims.env
+
+# systemd expands $JAVA_OPTS and splits it on whitespace.
+ExecStart=/opt/java/bin/java $JAVA_OPTS -jar /opt/aiims/app.jar \
+  --spring.config.additional-location=file:/opt/aiims/application-prod.properties
+
+# 143 = SIGTERM, which the JVM handles as a graceful shutdown.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=45
+
+# Hardening: the whole filesystem is read-only except the two paths the app
+# genuinely needs to write to.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/aiims/uploads /opt/aiims/logs
+
+[Install]
+WantedBy=multi-user.target

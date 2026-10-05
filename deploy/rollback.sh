@@ -1,52 +1,45 @@
 #!/usr/bin/env bash
 # =====================================================================
-#  Roll the application back to the previous release.
-#  The database is never touched by a rollback.
+#  Roll the application back to the previously deployed jar.
+#  The database is never touched.
 #
-#  Usage: ./deploy/rollback.sh [<git-ref>]
+#  Usage:
+#      sudo /opt/aiims/deploy/rollback.sh                  # newest backup
+#      sudo /opt/aiims/deploy/rollback.sh app-20261003-120000.jar
 # =====================================================================
 set -euo pipefail
 
-APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$APP_DIR"
+APP_DIR=/opt/aiims
+SERVICE=aiims-app.service
+HEALTH_URL=http://127.0.0.1:8080/login
 
 log() { printf '\n\033[1;34m==> %s\033[0m\n' "$1"; }
 die() { printf '\033[1;31mERROR: %s\033[0m\n' "$1" >&2; exit 1; }
 
-TARGET="${1:-}"
-[[ -n "$TARGET" ]] || die "Specify the commit to roll back to: ./deploy/rollback.sh <git-ref>"
+[[ $EUID -eq 0 ]] || die "Run as root."
 
-command -v docker >/dev/null 2>&1 || die "docker is not installed on this host."
-command -v git   >/dev/null 2>&1 || die "git is not installed on this host."
-
-git rev-parse --verify "$TARGET" >/dev/null 2>&1 \
-  || die "'$TARGET' is not a valid git ref here."
-
-CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-CURRENT_COMMIT="$(git rev-parse --short HEAD)"
-
-# stash any local edits so the checkout cannot fail mid-way
-if ! git diff --quiet || ! git diff --cached --quiet; then
-  log "Stashing local changes"
-  git stash push -u -m "pre-rollback $(date +%Y%m%d-%H%M%S)"
+if [[ -n "${1:-}" ]]; then
+  TARGET="$APP_DIR/backups/$1"
+  [[ -f "$TARGET" ]] || die "Backup jar not found: $TARGET"
+else
+  TARGET="$(ls -1t "$APP_DIR"/backups/app-*.jar 2>/dev/null | head -1 || true)"
+  [[ -n "$TARGET" ]] || die "No jar backups found in $APP_DIR/backups - nothing to roll back to."
 fi
 
-log "Rolling back from $CURRENT_COMMIT to $(git rev-parse --short "$TARGET")"
-git checkout "$TARGET"
+log "Rolling back to $(basename "$TARGET")"
+# Keep the outgoing jar so this rollback is itself reversible.
+cp -p "$APP_DIR/app.jar" "$APP_DIR/backups/app-replaced-$(date +%Y%m%d-%H%M%S).jar"
+install -m 640 -o aiims -g aiims "$TARGET" "$APP_DIR/app.jar"
 
-log "Rebuilding the app image"
-docker compose build app
+log "Restarting $SERVICE"
+systemctl restart "$SERVICE"
 
-log "Restarting the app container (database untouched)"
-docker compose up -d app
+log "Health check"
+for i in $(seq 1 60); do
+  if curl -fsS -o /dev/null --max-time 5 "$HEALTH_URL" 2>/dev/null; then
+    echo "    healthy after ${i}s"; exit 0
+  fi
+  sleep 1
+done
 
-cat <<EOF
-
-Rolled back to $(git rev-parse --short "$TARGET").
-
-To return to the previous version later:
-  git checkout ${CURRENT_BRANCH}
-  git revert HEAD              # or: git cherry-pick the deploy commit
-  ./deploy/deploy.sh --no-pull
-
-EOF
+warn "Still not healthy after 60s. Inspect: journalctl -u $SERVICE -n 50"

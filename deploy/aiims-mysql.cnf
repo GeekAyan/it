@@ -1,0 +1,33 @@
+# =====================================================================
+#  MySQL 8.4 - AIIMS app instance (port 3307)
+#
+#  This is a SECOND, fully separate instance that reuses the mysqld binary
+#  already installed on the host. It shares nothing with the production
+#  instance on port 3306 (different datadir, socket, PID file and service).
+#
+#  Install to: /opt/aiims/mysql/aiims-mysql.cnf
+# =====================================================================
+[mysqld]
+user                 = aiims
+datadir              = /opt/aiims/mysql/data
+port                 = 3307
+bind-address         = 127.0.0.1
+socket               = /opt/aiims/mysql/mysql.sock
+pid-file             = /opt/aiims/mysql/mysqld.pid
+log-error            = /opt/aiims/mysql/error.log
+
+# Disable the X Protocol so no second listening port is opened at all.
+mysqlx               = OFF
+
+character-set-server = utf8mb4
+collation-server     = utf8mb4_0900_ai_ci
+
+# Ample for a dataset of a few dozen rows; keeps memory use modest.
+innodb_buffer_pool_size = 128M
+
+# The production instance sets these too; avoid noisy warnings.
+skip-name-resolve    = OFF
+
+[client]
+port   = 3307
+socket = /opt/aiims/mysql/mysql.sock

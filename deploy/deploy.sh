@@ -1,91 +1,111 @@
 #!/usr/bin/env bash
 # =====================================================================
-#  Deploy the AIIMS IT Event Portal (Docker Compose stack).
+#  Deploy a new application jar to the AIIMS IT Event Portal.
 #
-#  Order of operations is deliberate:
-#    1. back up the database + uploads FIRST
-#    2. then pull new code, rebuild the image, restart only the app
+#      sudo /opt/aiims/deploy/deploy.sh /tmp/it-0.0.1-SNAPSHOT.jar
 #
-#  The database container and its volume are never touched, so redeploying
-#  cannot lose data. Roll back with deploy/rollback.sh if the app misbehaves.
+#  Sequence (deliberate):
+#      1. back up the database, uploads and the CURRENT jar
+#      2. install the new jar
+#      3. restart the service
+#      4. health check - automatically roll back if the app does not come up
 #
-#  Usage:
-#    ./deploy/deploy.sh              # backup, git pull, rebuild, restart app
-#    ./deploy/deploy.sh --no-pull    # backup, rebuild from current checkout
+#  The database service is never touched, so this cannot lose data.
 # =====================================================================
 set -euo pipefail
 
-APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$APP_DIR"
+APP_DIR=/opt/aiims
+MYSQL_CNF="$APP_DIR/mysql/aiims-mysql.cnf"
+ENV_FILE="$APP_DIR/aiims.env"
+SERVICE=aiims-app.service
+HEALTH_URL=http://127.0.0.1:8080/login
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
-APP_UID=10001          # must match the uid created in the Dockerfile
-mkdir -p backups
+mkdir -p "$APP_DIR/backups" "$APP_DIR/logs"
 
 log()  { printf '\n\033[1;34m==> %s\033[0m\n' "$1"; }
 warn() { printf '\033[1;33mWARNING: %s\033[0m\n' "$1"; }
 die()  { printf '\033[1;31mERROR: %s\033[0m\n' "$1" >&2; exit 1; }
 
-command -v docker >/dev/null 2>&1 || die "docker is not installed on this host."
-docker compose version >/dev/null 2>&1 || die "The 'docker compose' plugin is missing (apt install docker-compose-plugin)."
-[[ -f .env ]] || die ".env not found. Run: cp .env.example .env && nano .env && chmod 600 .env"
+NEW_JAR="${1:-}"
+[[ -n "$NEW_JAR" ]] || die "Usage: $0 /path/to/it-0.0.1-SNAPSHOT.jar"
+[[ -f "$NEW_JAR" ]]  || die "Jar not found: $NEW_JAR"
 
-# A backup is only meaningful if there is a live database to back up.
-docker compose ps --status running --services 2>/dev/null | grep -qx db \
-  || die "The 'db' container is not running. Start it first: docker compose up -d db"
+[[ $EUID -eq 0 ]]                || die "Run as root (it restarts a system service)."
+[[ -f "$MYSQL_CNF" ]]            || die "MySQL config missing - has init-db.sh been run?"
+[[ -f "$ENV_FILE" ]]            || die "$ENV_FILE missing."
+[[ -f "$APP_DIR/application-prod.properties" ]] || die "application-prod.properties missing."
 
-# --- preflight ---------------------------------------------------------
-# The container runs as uid 10001 and must be able to WRITE new uploads.
-if [[ -d uploads ]]; then
-  OWNER="$(stat -c %u uploads 2>/dev/null || echo 0)"
-  if [[ "$OWNER" != "$APP_UID" ]]; then
-    warn "uploads/ is owned by uid $OWNER but the container runs as uid $APP_UID."
-    warn "New image uploads will fail until you run: sudo chown -R ${APP_UID}:${APP_UID} uploads"
+DB_PASSWORD=""
+while IFS= read -r line; do
+  case "$line" in DB_PASSWORD=*) DB_PASSWORD="${line#DB_PASSWORD=}" ;; esac
+done < "$ENV_FILE"
+DB_PASSWORD="${DB_PASSWORD%\"}"; DB_PASSWORD="${DB_PASSWORD#\"}"
+MYSQL="/usr/bin/mysql --defaults-file=$MYSQL_CNF -u root -p$DB_PASSWORD"
+
+# --- 1. back up everything BEFORE changing anything --------------------
+log "Backing up the database"
+$MYSQL --single-transaction --routines --triggers \
+       --default-character-set=utf8mb4 eventdb \
+       > "$APP_DIR/backups/eventdb-${STAMP}.sql"
+[[ -s "$APP_DIR/backups/eventdb-${STAMP}.sql" ]] || die "Database backup is empty - ABORTING."
+
+if [[ -d "$APP_DIR/uploads" ]]; then
+  log "Backing up uploads"
+  tar -czf "$APP_DIR/backups/uploads-${STAMP}.tar.gz" -C "$APP_DIR" uploads
+fi
+
+CURRENT_JAR_BACKUP=""
+if [[ -f "$APP_DIR/app.jar" ]]; then
+  log "Saving the current jar"
+  cp -p "$APP_DIR/app.jar" "$APP_DIR/backups/app-${STAMP}.jar"
+  CURRENT_JAR_BACKUP="$APP_DIR/backups/app-${STAMP}.jar"
+fi
+
+# keep the 10 most recent of each
+ls -1t "$APP_DIR"/backups/eventdb-*.sql    2>/dev/null | tail -n +11 | xargs -r rm -f --
+ls -1t "$APP_DIR"/backups/uploads-*.tar.gz 2>/dev/null | tail -n +11 | xargs -r rm -f --
+ls -1t "$APP_DIR"/backups/app-*.jar       2>/dev/null | tail -n +11 | xargs -r rm -f --
+
+# --- 2. install the new jar --------------------------------------------
+log "Installing $(basename "$NEW_JAR")"
+install -m 640 -o aiims -g aiims "$NEW_JAR" "$APP_DIR/app.jar.new"
+mv -f "$APP_DIR/app.jar.new" "$APP_DIR/app.jar"
+
+# --- 3. restart --------------------------------------------------------
+log "Restarting $SERVICE"
+systemctl restart "$SERVICE"
+
+# --- 4. health check with automatic rollback ---------------------------
+log "Waiting for the application to become healthy"
+HEALTHY=0
+for i in $(seq 1 60); do
+  if curl -fsS -o /dev/null --max-time 5 "$HEALTH_URL" 2>/dev/null; then
+    HEALTHY=1; echo "    healthy after ${i}s"; break
   fi
-else
-  warn "uploads/ does not exist yet - the uploads backup will be skipped."
+  sleep 1
+done
+
+if [[ "$HEALTHY" -ne 1 ]]; then
+  warn "The application did not become healthy within 60 seconds."
+  echo "--- last 30 log lines ---"
+  journalctl -u "$SERVICE" -n 30 --no-pager || true
+  if [[ -n "$CURRENT_JAR_BACKUP" ]]; then
+    warn "Rolling back to the previous jar."
+    install -m 640 -o aiims -g aiims "$CURRENT_JAR_BACKUP" "$APP_DIR/app.jar"
+    systemctl restart "$SERVICE"
+    sleep 10
+    warn "Rolled back. The database was not modified."
+  fi
+  exit 1
 fi
 
-# --- 1. back up BEFORE anything else -----------------------------------
-log "Backing up the database to backups/eventdb-${STAMP}.sql"
-docker compose exec -T db sh -c \
-  'mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --single-transaction \
-   --routines --triggers --default-character-set=utf8mb4 eventdb' \
-  > "backups/eventdb-${STAMP}.sql"
-[[ -s "backups/eventdb-${STAMP}.sql" ]] || die "Database backup is empty - ABORTING without deploying."
-
-if [[ -d uploads ]]; then
-  log "Backing up uploads to backups/uploads-${STAMP}.tar.gz"
-  tar -czf "backups/uploads-${STAMP}.tar.gz" uploads
-fi
-
-# keep the 10 most recent backup pairs, so the disk cannot fill up
-ls -1t backups/eventdb-*.sql 2>/dev/null | tail -n +11 | xargs -r rm -f --
-ls -1t backups/uploads-*.tar.gz 2>/dev/null | tail -n +11 | xargs -r rm -f --
-
-# --- 2. fetch new code --------------------------------------------------
-if [[ "${1:-}" != "--no-pull" ]]; then
-  log "Pulling latest code from git"
-  git pull --ff-only
-fi
-
-# --- 3. rebuild the app image (the db is never rebuilt or restarted) ----
-log "Building the app image"
-docker compose build app
-
-log "Restarting the app container (database untouched)"
-docker compose up -d app
-
-# --- 4. report ---------------------------------------------------------
-log "Current stack status"
-docker compose ps
-
+log "Deployment succeeded"
+systemctl --no-pager --lines=0 status "$SERVICE" | head -3 || true
 cat <<EOF
 
-Next steps:
-  * Watch startup :  docker compose logs -f --tail=100 app
-  * Check Apache  :  curl -I http://127.0.0.1/login
-  * Roll back     :  ./deploy/rollback.sh
-  * Backups       :  ls -1t backups/
+  Backups : ls -1t $APP_DIR/backups/
+  Logs    : journalctl -u $SERVICE -f
+  Rollback: $APP_DIR/deploy/rollback.sh
 
 EOF
