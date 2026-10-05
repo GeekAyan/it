@@ -45,6 +45,13 @@ build/
 backups/
 deploy/*.bak
 
+# Runtime directories created by the deployment (never in git)
+logs/
+mysql/
+app.jar
+aiims.env
+application-prod.properties
+
 ### JVM crash dumps ###
 hs_err_pid*.log
 replay_pid*.log

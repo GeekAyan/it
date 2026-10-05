@@ -86,16 +86,36 @@ chown -R aiims:aiims /opt/aiims
 ### Step 4 — Configure
 ```bash
 cd /opt/aiims
-cp deploy/aiims-mysql.cnf          mysql/aiims-mysql.cnf
-cp deploy/aiims.env.example        aiims.env && chmod 600 aiims.env
+cp deploy/aiims.env.example           aiims.env && chmod 600 aiims.env
 cp deploy/application-prod.properties application-prod.properties
-cp deploy/aiims-mysql.service      /etc/systemd/system/
-cp deploy/aiims-app.service        /etc/systemd/system/
+cp deploy/aiims-mysql.service         /etc/systemd/system/
+cp deploy/aiims-app.service           /etc/systemd/system/
 nano aiims.env          # set DB_PASSWORD, MAIL_USERNAME, MAIL_PASSWORD
 ```
 Generate a strong `DB_PASSWORD` — MySQL 8.4's `validate_password` rejects weak
 ones. The same password is used for the app and the database, so they cannot
 drift apart.
+
+> The MySQL config is **not** copied here — `init-db.sh` installs it to
+> `/etc/mysql/aiims.cnf` in Step 7, because that is where AppArmor expects it.
+
+#### Why `/etc/mysql` and not `/opt/aiims`
+
+Ubuntu confines `mysqld` with an AppArmor profile that only permits reading
+`/etc/mysql/**` and writing `/var/lib/mysql/**`. A config under `/opt` is
+rejected outright:
+
+```
+mysqld: [ERROR] Failed to open required defaults file: .../aiims-mysql.cnf
+```
+
+`init-db.sh` handles both halves automatically:
+1. installs the config to `/etc/mysql/aiims.cnf`
+2. writes a narrowly-scoped local override to
+   `/etc/apparmor.d/local/usr.sbin.mysqld` granting access to
+   `/opt/aiims/mysql/**`, then reloads the profile
+
+To inspect what the confinement allows: `cat /etc/apparmor.d/usr.sbin.mysqld`.
 
 ### Step 5 — Build the jar (on your Windows machine)
 Build from a **clean clone** so `application-local.properties` (which holds

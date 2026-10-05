@@ -4,10 +4,10 @@ Documentation=https://dev.mysql.com/doc/
 After=network.target
 
 [Service]
-Type=notify
+Type=simple
 User=aiims
 Group=aiims
-ExecStart=/usr/sbin/mysqld --defaults-file=/opt/aiims/mysql/aiims-mysql.cnf
+ExecStart=/usr/sbin/mysqld --defaults-file=/etc/mysql/aiims.cnf
 ExecReload=/bin/kill -HUP $MAINPID
 KillSignal=SIGTERM
 Restart=on-failure
